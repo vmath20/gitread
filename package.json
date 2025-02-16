@@ -1,0 +1,27 @@
+{
+  "name": "gitread",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start"
+  },
+  "dependencies": {
+    "@types/node": "20.11.19",
+    "canvas-confetti": "^1.9.3",
+    "next": "14.1.0",
+    "openai": "^4.85.1",
+    "react": "18.2.0",
+    "react-dom": "18.2.0",
+    "react-markdown": "^9.0.3"
+  },
+  "devDependencies": {
+    "@tailwindcss/typography": "^0.5.16",
+    "@types/react": "18.2.57",
+    "autoprefixer": "10.4.17",
+    "postcss": "8.4.35",
+    "tailwindcss": "3.4.1",
+    "typescript": "5.3.3"
+  }
+}
