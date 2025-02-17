@@ -1,4 +1,4 @@
-import { NextResponse } from 'next/server'
+import { NextResponse, NextRequest } from 'next/server'
 import OpenAI from 'openai'
 import { getAuth } from '@clerk/nextjs/server'
 
@@ -6,7 +6,7 @@ const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 })
 
-export async function POST(req: Request) {
+export async function POST(req: NextRequest) {
   const { userId } = getAuth(req)
   
   if (!userId) {
