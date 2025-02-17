@@ -13,6 +13,7 @@ export default function Home() {
   const [viewMode, setViewMode] = useState<'markdown' | 'preview'>('preview')
   const [credits, setCredits] = useState(5)
   const [errorMessage, setErrorMessage] = useState('')
+  const [copyText, setCopyText] = useState('Copy')
   const { isSignedIn } = useAuth()
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -22,8 +23,10 @@ export default function Home() {
     setErrorMessage('')
     
     try {
-      // Check if it's an example repo first
-      const repo = repoUrl.replace('https://github.com/', '')
+      // Remove trailing slash if present
+      let trimmedRepoUrl = repoUrl.endsWith('/') ? repoUrl.slice(0, -1) : repoUrl;
+      
+      const repo = trimmedRepoUrl.replace('https://github.com/', '')
       if (repo in EXAMPLE_READMES) {
         setReadme(EXAMPLE_READMES[repo as keyof typeof EXAMPLE_READMES])
       } else {
@@ -32,7 +35,7 @@ export default function Home() {
           headers: {
             'Content-Type': 'application/json',
           },
-          body: JSON.stringify({ repoUrl }),
+          body: JSON.stringify({ repoUrl: trimmedRepoUrl }),
         })
         
         if (!response.ok) {
@@ -46,11 +49,9 @@ export default function Home() {
         }
         
         setReadme(data.readme)
-        // Only deduct credit for non-example repositories
         setCredits(prev => prev - 1)
       }
       
-      // Show fireworks for both cases
       const end = Date.now() + 1000
       const colors = ['#ff0000', '#00ff00', '#0000ff', '#ff00ff', '#ffff00']
 
@@ -85,7 +86,8 @@ export default function Home() {
   const handleCopy = async () => {
     try {
       await navigator.clipboard.writeText(readme)
-      alert('README copied to clipboard!')
+      setCopyText('Copied')
+      setTimeout(() => setCopyText('Copy'), 2000)
     } catch (err) {
       console.error('Failed to copy:', err)
     }
@@ -244,7 +246,7 @@ export default function Home() {
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3" />
                   </svg>
-                  Copy
+                  {copyText}
                 </button>
                 <button
                   onClick={handleDownload}
