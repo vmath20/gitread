@@ -5,6 +5,7 @@ import ReactMarkdown from 'react-markdown'
 import confetti from 'canvas-confetti'
 import { EXAMPLE_READMES } from './utils/example-readmes'
 import { SignInButton, SignUpButton, useAuth, UserButton } from '@clerk/nextjs'
+import { getUserCredits, updateUserCredits, saveGeneratedReadme, getGeneratedReadmes } from './utils/supabase'
 
 export default function Home() {
   const [repoUrl, setRepoUrl] = useState('')
@@ -14,7 +15,38 @@ export default function Home() {
   const [credits, setCredits] = useState(5)
   const [errorMessage, setErrorMessage] = useState('')
   const [copyText, setCopyText] = useState('Copy')
-  const { isSignedIn } = useAuth()
+  const { isSignedIn, userId } = useAuth()
+  const [showHistory, setShowHistory] = useState(false)
+  const [readmeHistory, setReadmeHistory] = useState<any[]>([])
+
+  useEffect(() => {
+    async function fetchCredits() {
+      if (isSignedIn && userId) {
+        try {
+          const userCredits = await getUserCredits(userId)
+          console.log('Initial credits loaded:', userCredits)
+          setCredits(userCredits)
+        } catch (error) {
+          console.error('Error loading initial credits:', error)
+        }
+      }
+    }
+    fetchCredits()
+  }, [isSignedIn, userId])
+
+  useEffect(() => {
+    async function fetchHistory() {
+      if (isSignedIn && userId) {
+        try {
+          const history = await getGeneratedReadmes(userId)
+          setReadmeHistory(history)
+        } catch (error) {
+          console.error('Error fetching README history:', error)
+        }
+      }
+    }
+    fetchHistory()
+  }, [isSignedIn, userId])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -23,8 +55,7 @@ export default function Home() {
     setErrorMessage('')
     
     try {
-      // Remove trailing slash if present
-      let trimmedRepoUrl = repoUrl.endsWith('/') ? repoUrl.slice(0, -1) : repoUrl;
+      let trimmedRepoUrl = repoUrl.endsWith('/') ? repoUrl.slice(0, -1) : repoUrl
       
       const repo = trimmedRepoUrl.replace('https://github.com/', '')
       if (repo in EXAMPLE_READMES) {
@@ -49,7 +80,35 @@ export default function Home() {
         }
         
         setReadme(data.readme)
-        setCredits(prev => prev - 1)
+        
+        // Update credits in state and database
+        if (userId) {
+          const newCredits = credits - 1
+          try {
+            console.log('Attempting to update credits from', credits, 'to', newCredits)
+            const success = await updateUserCredits(userId, newCredits)
+            if (success) {
+              console.log('Credits updated successfully, updating state')
+              setCredits(newCredits)
+            } else {
+              throw new Error('Failed to update credits')
+            }
+          } catch (error) {
+            console.error('Failed to update credits:', error)
+            setErrorMessage('Failed to update credits. Please try again.')
+            // Refresh credits from database to ensure consistency
+            const currentCredits = await getUserCredits(userId)
+            setCredits(currentCredits)
+          }
+        }
+
+        // Save the generated README
+        if (userId) {
+          await saveGeneratedReadme(userId, trimmedRepoUrl, data.readme)
+          // Refresh history
+          const history = await getGeneratedReadmes(userId)
+          setReadmeHistory(history)
+        }
       }
       
       const end = Date.now() + 1000
@@ -277,20 +336,59 @@ export default function Home() {
         )}
 
         {readme && !isSignedIn && (
-          <div className="mt-8 bg-white rounded-xl shadow-sm p-6 text-center">
-            <h3 className="text-xl font-semibold mb-4">Sign in to view the generated README</h3>
-            <div className="flex gap-4 justify-center">
-              <SignInButton mode="modal">
-                <button className="px-6 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors">
-                  Sign In
-                </button>
-              </SignInButton>
-              <SignUpButton mode="modal">
-                <button className="px-6 py-2 bg-black text-white rounded-lg hover:bg-gray-800 transition-colors">
-                  Sign Up
-                </button>
-              </SignUpButton>
+          <div className="mt-8">
+            <div className="bg-white rounded-xl shadow-sm p-6 relative">
+              <div className="prose prose-gray max-w-none opacity-50 blur-sm">
+                <ReactMarkdown>{readme}</ReactMarkdown>
+              </div>
+              <div className="absolute inset-0 flex items-center justify-center bg-white/50">
+                <div className="bg-white px-6 py-3 rounded-lg shadow-sm">
+                  <p className="text-gray-700 font-medium">Sign in to view the generated README</p>
+                </div>
+              </div>
             </div>
+          </div>
+        )}
+
+        {isSignedIn && (
+          <div className="mt-8">
+            <button
+              onClick={() => setShowHistory(!showHistory)}
+              className="mb-4 px-4 py-2 text-sm bg-gray-100 text-gray-600 rounded-lg hover:bg-gray-200 transition-colors inline-flex items-center gap-2"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              {showHistory ? 'Hide History' : 'Show History'}
+            </button>
+            
+            {showHistory && (
+              <div className="space-y-4">
+                <h3 className="text-lg font-medium text-gray-900">Previously Generated READMEs</h3>
+                {readmeHistory.map((item) => (
+                  <div key={item.id} className="bg-white rounded-xl shadow-sm p-6">
+                    <div className="flex justify-between items-start mb-4">
+                      <div>
+                        <h4 className="font-medium text-gray-900">{item.repo_url}</h4>
+                        <p className="text-sm text-gray-500">
+                          {new Date(item.created_at).toLocaleDateString()} at{' '}
+                          {new Date(item.created_at).toLocaleTimeString()}
+                        </p>
+                      </div>
+                      <button
+                        onClick={() => {
+                          setReadme(item.readme_content)
+                          setRepoUrl(item.repo_url)
+                        }}
+                        className="px-3 py-1 text-sm bg-gray-100 text-gray-600 rounded-lg hover:bg-gray-200 transition-colors"
+                      >
+                        View
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         )}
 
