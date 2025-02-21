@@ -6,6 +6,7 @@ import confetti from 'canvas-confetti'
 import { EXAMPLE_READMES } from './utils/example-readmes'
 import { SignInButton, SignUpButton, useAuth, UserButton } from '@clerk/nextjs'
 import { getUserCredits, updateUserCredits, saveGeneratedReadme, getGeneratedReadmes } from './utils/supabase'
+import { getStripe } from './utils/stripe'
 
 export default function Home() {
   const [repoUrl, setRepoUrl] = useState('')
@@ -176,6 +177,30 @@ export default function Home() {
     'prisma/prisma'
   ]
 
+  const handleBuyCredits = async (creditAmount: number) => {
+    try {
+      const response = await fetch('/api/create-checkout-session', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ credits: creditAmount }),
+      });
+
+      const { sessionId } = await response.json();
+      const stripe = await getStripe();
+      
+      if (stripe) {
+        const { error } = await stripe.redirectToCheckout({ sessionId });
+        if (error) {
+          console.error('Error redirecting to checkout:', error);
+        }
+      }
+    } catch (error) {
+      console.error('Error buying credits:', error);
+    }
+  };
+
   return (
     <main className="min-h-screen bg-[#F5F5F5]">
       {isSignedIn && (
@@ -228,7 +253,12 @@ export default function Home() {
           {isSignedIn && credits <= 0 && (
             <div className="mt-4 p-4 bg-red-50 rounded-xl text-center">
               <p className="text-red-600 mb-2">You've used all your credits</p>
-              <p className="text-sm text-red-500">Contact support to get more credits</p>
+              <button
+                onClick={() => handleBuyCredits(10)}
+                className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"
+              >
+                Buy 10 Credits for $10
+              </button>
             </div>
           )}
 
