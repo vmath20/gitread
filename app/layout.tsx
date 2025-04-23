@@ -16,9 +16,9 @@ export default function RootLayout({
       afterSignInUrl="/"
       afterSignUpUrl="/"
     >
-      <html lang="en">
+    <html lang="en">
         <body className="bg-white">{children}</body>
-      </html>
+    </html>
     </ClerkProvider>
   )
 }
