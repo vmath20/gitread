@@ -3,6 +3,8 @@ import { OpenAI } from 'openai'
 import { exec } from 'child_process'
 import { promisify } from 'util'
 import path from 'path'
+import fs from 'fs/promises'
+import os from 'os'
 
 const execAsync = promisify(exec)
 
@@ -63,6 +65,10 @@ function parseRepositoryContent(content: string): number {
 }
 
 export async function POST(req: Request) {
+  // Create a temporary directory for this request
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'gitingest-'))
+  const outputPath = path.join(tempDir, 'output.txt')
+  
   try {
     const { repoUrl } = await req.json()
     
@@ -137,5 +143,12 @@ export async function POST(req: Request) {
   } catch (error: any) {
     console.error("❌ Error:", error)
     return NextResponse.json({ error: error.message }, { status: 500 })
+  } finally {
+    // Clean up temporary directory
+    try {
+      await fs.rm(tempDir, { recursive: true, force: true })
+    } catch (error) {
+      console.error("Error cleaning up temporary directory:", error)
+    }
   }
 } 
