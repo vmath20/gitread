@@ -1,100 +1,141 @@
-import { NextResponse, NextRequest } from 'next/server'
-import OpenAI from 'openai'
-import { getAuth } from '@clerk/nextjs/server'
+import { NextResponse } from 'next/server'
+import { OpenAI } from 'openai'
+import { exec } from 'child_process'
+import { promisify } from 'util'
+import path from 'path'
 
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
+const execAsync = promisify(exec)
+
+const client = new OpenAI({
+  baseURL: "https://openrouter.ai/api/v1",
+  apiKey: process.env.OPENROUTER_API_KEY || "",
 })
 
-export async function POST(req: NextRequest) {
-  const { userId } = getAuth(req)
-  
-  if (!userId) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
+// Add customInstructions to your request body type
+interface GenerateRequest {
+  repoUrl: string;
+}
 
+interface GitIngestOutput {
+  content: string;
+  summary: string;
+  tree: string;
+  estimated_tokens: number;
+  warnings?: string[];
+  limits?: {
+    max_file_size: string;
+    max_total_size: string;
+    max_files: number;
+    max_directory_depth: number;
+    max_input_tokens: number;
+  };
+  error?: string;
+}
+
+function countWords(text: string): number {
+  // Split by whitespace and filter out empty strings
+  return text.trim().split(/\s+/).filter(word => word.length > 0).length;
+}
+
+// Add this function to parse and count repository content
+function parseRepositoryContent(content: string): number {
+  try {
+    // Log the first part of the content to debug
+    console.log("Content sample:", content.substring(0, 1000));
+    
+    // Split the content into sections (files, metadata, etc.)
+    const sections = content.split(/\n(?=(?:File:|Directory:|Metadata:|Description:))/g);
+    
+    // Join all the actual content, removing section headers
+    const allContent = sections
+      .map(section => section.replace(/^(File:|Directory:|Metadata:|Description:).*?\n/s, ''))
+      .join('\n');
+    
+    // Count words in the actual content
+    const wordCount = countWords(allContent);
+    console.log("Repository content word count:", wordCount);
+    
+    return wordCount;
+  } catch (error) {
+    console.error("Error parsing repository content:", error);
+    return 0;
+  }
+}
+
+export async function POST(req: Request) {
   try {
     const { repoUrl } = await req.json()
     
-    // Extract owner and repo from GitHub URL
-    const urlParts = repoUrl.split('/')
-    const owner = urlParts[urlParts.length - 2]
-    const repo = urlParts[urlParts.length - 1]
-
-    if (!owner || !repo) {
-      return NextResponse.json({ error: 'Invalid GitHub URL' }, { status: 400 })
+    // Run GitIngest Python script
+    console.log("🟡 Running GitIngest for:", repoUrl)
+    let gitIngestOutput: GitIngestOutput
+    try {
+      const scriptPath = path.join(process.cwd(), 'scripts', 'git_ingest.py')
+      const pythonPath = path.join(process.cwd(), 'venv', 'bin', 'python3')
+      const result = await execAsync(`${pythonPath} ${scriptPath} "${repoUrl}"`)
+      gitIngestOutput = JSON.parse(result.stdout)
+      console.log("✅ GitIngest completed successfully")
+    } catch (error: any) {
+      console.error("❌ GitIngest error:", error.message)
+      throw new Error(`GitIngest failed: ${error.message}`)
     }
+    
+    if (gitIngestOutput.error) {
+      return NextResponse.json({ 
+        error: gitIngestOutput.error,
+        limits: gitIngestOutput.limits
+      }, { status: 400 })
+    }
+    
+    // Use estimated tokens if available, otherwise count words
+    const inputTokens = gitIngestOutput.estimated_tokens || countWords(gitIngestOutput.content)
+    console.log("📝 Input tokens:", inputTokens)
+    
+    // Check if input tokens exceed the limit
+    if (inputTokens > (gitIngestOutput.limits?.max_input_tokens || 250_000)) {
+      return NextResponse.json({ 
+        error: `Repository content exceeds maximum token limit of ${gitIngestOutput.limits?.max_input_tokens.toLocaleString()} tokens (estimated ${inputTokens.toLocaleString()} tokens)`,
+        limits: gitIngestOutput.limits
+      }, { status: 400 })
+    }
+    
+    // Create prompt for the model
+    const prompt = `Make a README for the following GitHub repository. 
+    Directly output the README file without any additional text.\n\n
+    Summary:\n${gitIngestOutput.summary}\n\n
+    Tree:\n${gitIngestOutput.tree}\n\n
+    Content:\n${gitIngestOutput.content}`
 
-    // Fetch repository data from GitHub API
-    const response = await fetch(`https://api.github.com/repos/${owner}/${repo}`, {
-      headers: {
-        Authorization: `Bearer ${process.env.GITHUB_TOKEN}`,
-        'Accept': 'application/vnd.github.v3+json'
-      },
+    // Generate README using Gemini
+    console.log("🤖 Generating README with Gemini...")
+    let response = await client.chat.completions.create({
+      model: "google/gemini-2.5-pro-preview-03-25",
+      messages: [
+        { role: "system", content: "You are an expert technical writer." },
+        { role: "user", content: prompt }
+      ]
     })
+    
+    // Clean up the markdown code block markers
+    let readme = response.choices[0].message.content || ''
+    readme = readme.replace(/^```markdown\n?/, '')
+    readme = readme.replace(/```$/, '')
+    readme = readme.trim()
 
-    if (!response.ok) {
-      const errorText = await response.text()
-      console.error('GitHub API Error:', errorText)
-      return NextResponse.json({ error: 'Failed to fetch repository data', details: errorText }, { status: response.status })
-    }
+    // Count output words
+    const outputTokens = countWords(readme)
+    console.log("📝 Output tokens:", outputTokens)
 
-    const repoData = await response.json()
-
-    // Fetch repository contents
-    const contentsResponse = await fetch(`https://api.github.com/repos/${owner}/${repo}/contents`, {
-      headers: {
-        Authorization: `Bearer ${process.env.GITHUB_TOKEN}`,
-        'Accept': 'application/vnd.github.v3+json'
-      },
-    })
-
-    if (!contentsResponse.ok) {
-      const errorText = await contentsResponse.text()
-      console.error('GitHub Contents API Error:', errorText)
-      return NextResponse.json({ error: 'Failed to fetch repository contents', details: errorText }, { status: contentsResponse.status })
-    }
-
-    const contents = await contentsResponse.json()
-
-    if (!Array.isArray(contents)) {
-      return NextResponse.json({ error: 'Invalid repository contents' }, { status: 400 })
-    }
-
-    // Create a prompt for OpenAI
-    const prompt = `Generate a comprehensive and professional README.md file for the following GitHub repository:
-
-Repository: ${repoData.name}
-Description: ${repoData.description || 'No description provided'}
-Language: ${repoData.language || 'Not specified'}
-Contents: ${contents.map(item => item.name).join(', ')}
-
-Please include:
-1. A detailed project title and description
-2. Key features and benefits
-3. Comprehensive installation instructions
-4. Detailed usage examples with code snippets
-5. API documentation (if applicable)
-6. Configuration options
-7. Troubleshooting guide
-8. Contributing guidelines
-9. License information
-10. Credits and acknowledgments
-
-Format the README in Markdown and make it engaging and professional.`
-
-    const completion = await openai.chat.completions.create({
-      model: "gpt-3.5-turbo",
-      messages: [{ role: "user", content: prompt }],
-    })
-
-    const readme = completion.choices[0].message.content
-
-    return NextResponse.json({ readme })
-  } catch (error) {
-    console.error('Error:', error)
     return NextResponse.json({ 
-      error: error instanceof Error ? error.message : 'Failed to generate README' 
-    }, { status: 500 })
+      readme,
+      inputTokens,
+      outputTokens,
+      warnings: gitIngestOutput.warnings,
+      limits: gitIngestOutput.limits
+    })
+    
+  } catch (error: any) {
+    console.error("❌ Error:", error)
+    return NextResponse.json({ error: error.message }, { status: 500 })
   }
 } 

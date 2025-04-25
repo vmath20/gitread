@@ -1,5 +1,6 @@
 /** @type {import('tailwindcss').Config} */
 module.exports = {
+  darkMode: 'class',
   content: [
     "./app/**/*.{js,ts,jsx,tsx,mdx}",
     "./components/**/*.{js,ts,jsx,tsx,mdx}",
@@ -80,6 +81,42 @@ module.exports = {
             },
           },
         },
+        dark: {
+          css: {
+            color: '#fff',
+            h1: { color: '#fff' },
+            h2: { color: '#fff' },
+            h3: { color: '#fff' },
+            h4: { color: '#fff' },
+            p: { color: '#e5e7eb' },
+            strong: { color: '#fff' },
+            a: { 
+              color: '#a78bfa',
+              '&:hover': {
+                color: '#c4b5fd',
+              },
+            },
+            code: {
+              color: '#fff',
+              backgroundColor: '#374151',
+            },
+            pre: {
+              backgroundColor: '#1f2937',
+              color: '#e5e7eb',
+            },
+          },
+        },
+      },
+      keyframes: {
+        ellipsis: {
+          '0%': { content: '.' },
+          '33%': { content: '..' },
+          '66%': { content: '...' },
+          '100%': { content: '...' },
+        }
+      },
+      animation: {
+        'ellipsis': 'ellipsis 1.5s steps(4, jump-none) infinite',
       },
     },
   },

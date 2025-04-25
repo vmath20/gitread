@@ -7,6 +7,8 @@ import { EXAMPLE_READMES } from './utils/example-readmes'
 import { SignInButton, SignUpButton, useAuth, UserButton } from '@clerk/nextjs'
 import { getUserCredits, updateUserCredits, saveGeneratedReadme, getGeneratedReadmes } from './utils/supabase'
 import { getStripe } from './utils/stripe'
+import LoadingIndicator from './components/LoadingIndicator'
+import ThemeToggle from './components/ThemeToggle'
 
 export default function Home() {
   const [repoUrl, setRepoUrl] = useState('')
@@ -19,6 +21,8 @@ export default function Home() {
   const { isSignedIn, userId } = useAuth()
   const [showHistory, setShowHistory] = useState(false)
   const [readmeHistory, setReadmeHistory] = useState<any[]>([])
+  const [inputTokens, setInputTokens] = useState<number | null>(null)
+  const [outputTokens, setOutputTokens] = useState<number>(0)
 
   useEffect(() => {
     async function fetchCredits() {
@@ -49,98 +53,133 @@ export default function Home() {
     fetchHistory()
   }, [isSignedIn, userId])
 
+  useEffect(() => {
+    let interval: NodeJS.Timeout;
+    
+    if (isSignedIn && userId) {
+      // Refresh credits every 30 seconds
+      interval = setInterval(async () => {
+        try {
+          const currentCredits = await getUserCredits(userId);
+          setCredits(currentCredits);
+        } catch (error) {
+          console.error('Error refreshing credits:', error);
+        }
+      }, 30000);
+    }
+
+    return () => {
+      if (interval) {
+        clearInterval(interval);
+      }
+    };
+  }, [isSignedIn, userId]);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (credits <= 0) return
+    
     setLoading(true)
     setErrorMessage('')
+    setInputTokens(null)  // Set to null while processing
+    setOutputTokens(0)    // Set to 0 while processing
     
     try {
       let trimmedRepoUrl = repoUrl.endsWith('/') ? repoUrl.slice(0, -1) : repoUrl
-      
       const repo = trimmedRepoUrl.replace('https://github.com/', '')
+      
       if (repo in EXAMPLE_READMES) {
-        setReadme(EXAMPLE_READMES[repo as keyof typeof EXAMPLE_READMES])
-      } else {
-        const response = await fetch('/api/generate', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ repoUrl: trimmedRepoUrl }),
-        })
+        // For example repos, just set the content directly without loading state
+        setLoading(false)
+        const exampleReadmeContent = EXAMPLE_READMES[repo as keyof typeof EXAMPLE_READMES]
+        setReadme(exampleReadmeContent)
         
-        if (!response.ok) {
-          const error = await response.json()
-          throw new Error(error.error || 'Failed to generate README')
-        }
+        // Count words for example content
+        const wordCount = exampleReadmeContent.trim().split(/\s+/).filter(word => word.length > 0).length
+        setInputTokens(wordCount)
+        setOutputTokens(wordCount)
         
-        const data = await response.json()
-        if (!data.readme) {
-          throw new Error('No README generated')
-        }
-        
-        setReadme(data.readme)
-        
-        // Update credits in state and database
-        if (userId) {
+        showConfetti()
+        return // Exit early for example repos
+      }
+      
+      // Only proceed with API call and credit deduction for non-example repos
+      if (credits <= 0) return
+      
+      const response = await fetch('/api/generate', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ 
+          repoUrl: trimmedRepoUrl
+        }),
+      })
+      
+      const data = await response.json()
+      
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to generate README')
+      }
+      
+      // Set README and word counts from API response
+      setReadme(data.readme)
+      setInputTokens(data.inputTokens)  // This will now be the actual word count
+      setOutputTokens(data.outputTokens)
+      
+      // Update credits and save README only for non-example repos
+      if (userId) {
+        try {
           const newCredits = credits - 1
-          try {
-            console.log('Attempting to update credits from', credits, 'to', newCredits)
-            const success = await updateUserCredits(userId, newCredits)
-            if (success) {
-              console.log('Credits updated successfully, updating state')
-              setCredits(newCredits)
-            } else {
-              throw new Error('Failed to update credits')
-            }
-          } catch (error) {
-            console.error('Failed to update credits:', error)
-            setErrorMessage('Failed to update credits. Please try again.')
-            // Refresh credits from database to ensure consistency
-            const currentCredits = await getUserCredits(userId)
-            setCredits(currentCredits)
-          }
-        }
-
-        // Save the generated README
-        if (userId) {
+          await updateUserCredits(userId, newCredits)
+          setCredits(newCredits)
+          
+          // Save to history
           await saveGeneratedReadme(userId, trimmedRepoUrl, data.readme)
-          // Refresh history
           const history = await getGeneratedReadmes(userId)
           setReadmeHistory(history)
+        } catch (error) {
+          console.error('Error updating credits or history:', error)
+          const currentCredits = await getUserCredits(userId)
+          setCredits(currentCredits)
         }
       }
       
-      const end = Date.now() + 1000
-      const colors = ['#ff0000', '#00ff00', '#0000ff', '#ff00ff', '#ffff00']
-
-      ;(function frame() {
-        confetti({
-          particleCount: 5,
-          angle: 60,
-          spread: 55,
-          origin: { x: 0 },
-          colors: colors
-        })
-        confetti({
-          particleCount: 5,
-          angle: 120,
-          spread: 55,
-          origin: { x: 1 },
-          colors: colors
-        })
-
-        if (Date.now() < end) {
-          requestAnimationFrame(frame)
-        }
-      }())
+      showConfetti()
     } catch (error) {
-      console.error('Error generating README:', error)
-      setErrorMessage(error instanceof Error ? error.message : 'Failed to generate README')
+      console.error('Error:', error)
+      if (!readme) {
+        setErrorMessage('Failed to generate README. Please try again.')
+      }
     } finally {
       setLoading(false)
     }
+  }
+
+  // Separate confetti function to keep code DRY
+  const showConfetti = () => {
+    const end = Date.now() + 1000
+    const colors = ['#ff0000', '#00ff00', '#0000ff', '#ff00ff', '#ffff00']
+    
+    ;(function frame() {
+      confetti({
+        particleCount: 5,
+        angle: 60,
+        spread: 55,
+        origin: { x: 0 },
+        colors: colors
+      })
+      confetti({
+        particleCount: 5,
+        angle: 120,
+        spread: 55,
+        origin: { x: 1 },
+        colors: colors
+      })
+
+      if (Date.now() < end) {
+        requestAnimationFrame(frame)
+      }
+    }())
   }
 
   const handleCopy = async () => {
@@ -202,52 +241,57 @@ export default function Home() {
   };
 
   return (
-    <main className="min-h-screen bg-[#F5F5F5]">
+    <main className="min-h-screen bg-[#FBF9F5] dark:bg-gray-900 relative">
       {isSignedIn && (
         <div className="absolute top-4 right-4 flex items-center gap-4">
-          <div className="text-sm text-gray-600">
-            <span className="font-medium">{credits}</span> credits remaining
+          <div className="bg-white dark:bg-gray-800 px-4 py-2 rounded-full shadow-sm">
+            <span className="font-semibold text-purple-600 dark:text-purple-400">{credits}</span>
+            <span className="text-gray-600 dark:text-gray-300"> credits remaining</span>
           </div>
+          <ThemeToggle />
           <UserButton afterSignOutUrl="/" />
         </div>
       )}
 
       <div className="max-w-4xl mx-auto py-32 px-4">
         <div className="text-center space-y-6 mb-16">
-          <h1 className="text-6xl font-bold">
-            Git<span className="text-purple-600">Read</span>
+          <h1 className="text-6xl font-bold text-black dark:text-white">
+            Git<span className="text-purple-600 dark:text-purple-400">Read</span>
           </h1>
-          <h2 className="text-4xl text-black font-medium">
+          <h2 className="text-4xl text-black dark:text-white font-medium">
             AI-powered README generator
           </h2>
-          <p className="text-gray-600 max-w-xl mx-auto text-lg">
+          <p className="text-gray-600 dark:text-gray-300 max-w-xl mx-auto text-lg">
             Turn any Git repository into a professional README file using AI. Perfect for documenting your projects with minimal effort.
           </p>
         </div>
 
-        <div className="bg-white rounded-3xl shadow-[0_8px_30px_rgb(0,0,0,0.04)] p-8">
+        <div className="bg-white dark:bg-gray-800 rounded-3xl shadow-[0_8px_30px_rgb(0,0,0,0.04)] p-8">
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="flex gap-3">
               <input
                 type="text"
                 value={repoUrl}
                 onChange={(e) => setRepoUrl(e.target.value)}
-                placeholder="https://github.com/tailwindlabs/tailwindcss"
+                placeholder="https://github.com/username/repo"
                 className="flex-1 p-4 border rounded-2xl bg-white focus:outline-none focus:ring-1 focus:ring-gray-200 text-lg"
               />
               <button
                 type="submit"
                 disabled={loading || !isSignedIn || credits <= 0}
-                className="px-6 py-4 bg-black text-white rounded-2xl disabled:opacity-50 hover:bg-gray-800 transition-colors text-lg font-medium"
+                className="px-6 py-4 bg-purple-600 text-white rounded-2xl disabled:opacity-50 hover:bg-purple-700 transition-colors text-lg font-medium"
               >
                 Generate ✨
               </button>
             </div>
-            {errorMessage && (
-              <div className="mt-4 p-4 bg-red-50 rounded-xl text-center">
-                <p className="text-red-600">{errorMessage}</p>
-              </div>
-            )}
+            
+            <div className="mt-2">
+              {errorMessage && (
+                <div className="mt-4 p-4 bg-red-50 rounded-xl text-center">
+                  <p className="text-red-600">{errorMessage}</p>
+                </div>
+              )}
+            </div>
           </form>
 
           {isSignedIn && credits <= 0 && (
@@ -296,11 +340,7 @@ export default function Home() {
           </div>
         </div>
 
-        {loading && (
-          <div className="text-center mt-8">
-            <p className="text-gray-600">Generating README...</p>
-          </div>
-        )}
+        {loading && <LoadingIndicator />}
 
         {readme && isSignedIn && (
           <div className="mt-8 space-y-4">
@@ -381,10 +421,10 @@ export default function Home() {
         )}
 
         {isSignedIn && (
-          <div className="mt-8">
+          <div className="mt-12">
             <button
               onClick={() => setShowHistory(!showHistory)}
-              className="mb-4 px-4 py-2 text-sm bg-gray-100 text-gray-600 rounded-lg hover:bg-gray-200 transition-colors inline-flex items-center gap-2"
+              className="mb-6 px-4 py-2 text-sm bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-all duration-200 shadow-sm inline-flex items-center gap-2"
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -394,29 +434,34 @@ export default function Home() {
             
             {showHistory && (
               <div className="space-y-4">
-                <h3 className="text-lg font-medium text-gray-900">Previously Generated READMEs</h3>
-                {readmeHistory.map((item) => (
-                  <div key={item.id} className="bg-white rounded-xl shadow-sm p-6">
-                    <div className="flex justify-between items-start mb-4">
-                      <div>
-                        <h4 className="font-medium text-gray-900">{item.repo_url}</h4>
-                        <p className="text-sm text-gray-500">
-                          {new Date(item.created_at).toLocaleDateString()} at{' '}
-                          {new Date(item.created_at).toLocaleTimeString()}
-                        </p>
+                <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-4">Previously Generated READMEs</h3>
+                {readmeHistory.length === 0 ? (
+                  <p className="text-gray-600 dark:text-gray-400 text-center py-8">No READMEs generated yet</p>
+                ) : (
+                  readmeHistory.map((item) => (
+                    <div key={item.id} className="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-6 border border-gray-100 dark:border-gray-700">
+                      <div className="flex justify-between items-start">
+                        <div>
+                          <h4 className="font-medium text-gray-900 dark:text-white">{item.repo_url}</h4>
+                          <p className="text-sm text-gray-500 dark:text-gray-400">
+                            {new Date(item.created_at).toLocaleDateString()} at{' '}
+                            {new Date(item.created_at).toLocaleTimeString()}
+                          </p>
+                        </div>
+                        <button
+                          onClick={() => {
+                            setReadme(item.readme_content);
+                            setRepoUrl(item.repo_url);
+                            setShowHistory(false); // Hide history after selecting
+                          }}
+                          className="px-4 py-2 text-sm bg-purple-50 dark:bg-purple-900/20 text-purple-600 dark:text-purple-400 rounded-lg hover:bg-purple-100 dark:hover:bg-purple-900/30 transition-all duration-200"
+                        >
+                          View README
+                        </button>
                       </div>
-                      <button
-                        onClick={() => {
-                          setReadme(item.readme_content)
-                          setRepoUrl(item.repo_url)
-                        }}
-                        className="px-3 py-1 text-sm bg-gray-100 text-gray-600 rounded-lg hover:bg-gray-200 transition-colors"
-                      >
-                        View
-                      </button>
                     </div>
-                  </div>
-                ))}
+                  ))
+                )}
               </div>
             )}
           </div>

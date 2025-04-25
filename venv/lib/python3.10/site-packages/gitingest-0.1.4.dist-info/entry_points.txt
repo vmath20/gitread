@@ -1,0 +1,2 @@
+[console_scripts]
+gitingest = gitingest.cli:main

@@ -57,7 +57,8 @@ export async function updateUserCredits(userId: string, credits: number) {
         .from('user_credits')
         .insert({
           user_id: userId,
-          credits: credits
+          credits: credits,
+          updated_at: new Date().toISOString()
         })
 
       if (insertError) {
@@ -73,6 +74,7 @@ export async function updateUserCredits(userId: string, credits: number) {
           updated_at: new Date().toISOString()
         })
         .eq('user_id', userId)
+        .single()
 
       if (updateError) {
         console.error('Error updating credits:', updateError)
