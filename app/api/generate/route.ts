@@ -67,10 +67,11 @@ function parseRepositoryContent(content: string): number {
 export async function POST(req: Request) {
   // Create a temporary directory for this request
   const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'gitingest-'))
-  const outputPath = path.join(tempDir, 'output.txt')
+  console.log("📁 Created temporary directory:", tempDir)
   
   try {
     const { repoUrl } = await req.json()
+    console.log("🔗 Processing repository URL:", repoUrl)
     
     // Run GitIngest Python script
     console.log("🟡 Running GitIngest for:", repoUrl)
@@ -78,15 +79,30 @@ export async function POST(req: Request) {
     try {
       const scriptPath = path.join(process.cwd(), 'scripts', 'git_ingest.py')
       const pythonPath = path.join(process.cwd(), 'venv', 'bin', 'python3')
-      const result = await execAsync(`${pythonPath} ${scriptPath} "${repoUrl}"`)
-      gitIngestOutput = JSON.parse(result.stdout)
-      console.log("✅ GitIngest completed successfully")
+      console.log("📜 Script path:", scriptPath)
+      console.log("🐍 Python path:", pythonPath)
+      
+      const command = `${pythonPath} ${scriptPath} "${repoUrl}"`
+      console.log("🔧 Executing command:", command)
+      
+      const result = await execAsync(command)
+      console.log("📝 GitIngest output:", result.stdout)
+      
+      try {
+        gitIngestOutput = JSON.parse(result.stdout)
+        console.log("✅ Successfully parsed GitIngest output")
+      } catch (parseError) {
+        console.error("❌ Failed to parse GitIngest output:", result.stdout)
+        throw new Error(`Failed to parse GitIngest output: ${parseError.message}`)
+      }
     } catch (error: any) {
       console.error("❌ GitIngest error:", error.message)
+      console.error("Error details:", error)
       throw new Error(`GitIngest failed: ${error.message}`)
     }
     
     if (gitIngestOutput.error) {
+      console.log("⚠️ GitIngest returned error:", gitIngestOutput.error)
       return NextResponse.json({ 
         error: gitIngestOutput.error,
         limits: gitIngestOutput.limits
@@ -99,6 +115,7 @@ export async function POST(req: Request) {
     
     // Check if input tokens exceed the limit
     if (inputTokens > (gitIngestOutput.limits?.max_input_tokens || 250_000)) {
+      console.log("⚠️ Token limit exceeded")
       return NextResponse.json({ 
         error: `Repository content exceeds maximum token limit of ${gitIngestOutput.limits?.max_input_tokens.toLocaleString()} tokens (estimated ${inputTokens.toLocaleString()} tokens)`,
         limits: gitIngestOutput.limits
@@ -142,13 +159,16 @@ export async function POST(req: Request) {
     
   } catch (error: any) {
     console.error("❌ Error:", error)
+    console.error("Error stack:", error.stack)
     return NextResponse.json({ error: error.message }, { status: 500 })
   } finally {
     // Clean up temporary directory
     try {
+      console.log("🧹 Cleaning up temporary directory:", tempDir)
       await fs.rm(tempDir, { recursive: true, force: true })
+      console.log("✅ Cleanup complete")
     } catch (error) {
-      console.error("Error cleaning up temporary directory:", error)
+      console.error("❌ Error cleaning up temporary directory:", error)
     }
   }
 } 
