@@ -8,9 +8,16 @@ import os from 'os'
 
 const execAsync = promisify(exec)
 
+// Get the API key from environment variable
+const openRouterApiKey = process.env.OPENROUTER_API_KEY
+console.log("🔑 OpenRouter API Key:", openRouterApiKey ? "Present" : "Missing")
+if (!openRouterApiKey) {
+  console.error("❌ OPENROUTER_API_KEY is not set in environment variables")
+}
+
 const client = new OpenAI({
   baseURL: "https://openrouter.ai/api/v1",
-  apiKey: process.env.OPENROUTER_API_KEY || "",
+  apiKey: openRouterApiKey || "",
 })
 
 // Add customInstructions to your request body type
@@ -65,6 +72,13 @@ function parseRepositoryContent(content: string): number {
 }
 
 export async function POST(req: Request) {
+  // Check if API key is set
+  if (!openRouterApiKey) {
+    return NextResponse.json({ 
+      error: "OpenRouter API key is not configured. Please set OPENROUTER_API_KEY in your environment variables."
+    }, { status: 500 })
+  }
+
   // Create a temporary directory for this request
   const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'gitingest-'))
   console.log("📁 Created temporary directory:", tempDir)
