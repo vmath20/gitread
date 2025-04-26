@@ -1,4 +1,4 @@
-import { NextResponse } from 'next/server'
+import { NextResponse, NextRequest } from 'next/server'
 import { OpenAI } from 'openai'
 import { spawn } from 'child_process'
 import path from 'path'
@@ -87,7 +87,7 @@ function isValidGitHubUrl(url: string): boolean {
   }
 }
 
-export async function POST(req: Request) {
+export async function POST(req: NextRequest) {
   // Check if API key is set
   if (!openRouterApiKey) {
     return NextResponse.json({ 
