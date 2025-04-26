@@ -5,7 +5,7 @@ import ReactMarkdown from 'react-markdown'
 import confetti from 'canvas-confetti'
 import { EXAMPLE_READMES } from './utils/example-readmes'
 import { SignInButton, SignUpButton, useAuth, UserButton } from '@clerk/nextjs'
-import { getUserCredits, updateUserCredits, saveGeneratedReadme, getGeneratedReadmes } from './utils/supabase'
+import { getUserCredits, setUserCredits, saveGeneratedReadme, getGeneratedReadmes } from './utils/supabase'
 import { getStripe } from './utils/stripe'
 import LoadingIndicator from './components/LoadingIndicator'
 import ThemeToggle from './components/ThemeToggle'
@@ -130,7 +130,7 @@ export default function Home() {
       if (userId) {
         try {
           const newCredits = credits - 1
-          await updateUserCredits(userId, newCredits)
+          await setUserCredits(userId, newCredits)
           setCredits(newCredits)
           
           // Save to history

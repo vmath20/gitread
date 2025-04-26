@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
-import { updateUserCredits } from '../utils/supabase';
 import { useAuth } from '@clerk/nextjs';
 
 export default function SuccessPage() {
@@ -10,6 +9,7 @@ export default function SuccessPage() {
   const router = useRouter();
   const { userId } = useAuth();
   const [error, setError] = useState('');
+  const [status, setStatus] = useState<'loading' | 'success' | 'error'>('loading');
   
   useEffect(() => {
     async function handleSuccess() {
@@ -25,17 +25,18 @@ export default function SuccessPage() {
           });
 
           if (response.ok) {
-            const { credits } = await response.json();
-            await updateUserCredits(userId, credits);
+            setStatus('success');
             // Redirect after a short delay to show success message
             setTimeout(() => router.push('/'), 2000);
           } else {
             const error = await response.json();
             setError(error.message || 'Failed to process payment');
+            setStatus('error');
           }
         } catch (error) {
           console.error('Error processing success:', error);
           setError('Failed to process payment');
+          setStatus('error');
         }
       }
     }
@@ -45,15 +46,22 @@ export default function SuccessPage() {
   return (
     <div className="min-h-screen bg-[#F5F5F5] flex items-center justify-center">
       <div className="bg-white p-8 rounded-xl shadow-sm text-center">
-        {error ? (
+        {status === 'loading' && (
+          <>
+            <h1 className="text-2xl font-bold mb-4">Processing Payment</h1>
+            <p className="text-gray-600">Please wait while we verify your payment...</p>
+          </>
+        )}
+        {status === 'error' && (
           <>
             <h1 className="text-2xl font-bold mb-4 text-red-600">Payment Error</h1>
             <p className="text-gray-600">{error}</p>
           </>
-        ) : (
+        )}
+        {status === 'success' && (
           <>
             <h1 className="text-2xl font-bold mb-4">Payment Successful!</h1>
-            <p className="text-gray-600">Please wait while we update your credits...</p>
+            <p className="text-gray-600">Your credits will be added shortly. Please wait while we redirect you...</p>
           </>
         )}
       </div>
