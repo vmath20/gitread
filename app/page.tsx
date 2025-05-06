@@ -24,6 +24,7 @@ export default function Home() {
   const [readmeHistory, setReadmeHistory] = useState<any[]>([])
   const [inputTokens, setInputTokens] = useState<number | null>(null)
   const [outputTokens, setOutputTokens] = useState<number>(0)
+  const [selectedCredits, setSelectedCredits] = useState<number>(2)
 
   useEffect(() => {
     async function fetchCredits() {
@@ -413,11 +414,32 @@ export default function Home() {
           {isSignedIn && credits <= 0 && (
             <div className="mt-4 p-4 bg-red-50 rounded-xl text-center">
               <p className="text-red-600 mb-2">You've used all your credits</p>
+              
+              <div className="mb-6 space-y-3">
+                <p className="text-gray-700">Select the number of credits to purchase:</p>
+                <div className="mx-auto max-w-xl flex items-center gap-4">
+                  <span className="text-sm text-gray-600 w-8">2</span>
+                  <input 
+                    type="range" 
+                    min="2" 
+                    max="100" 
+                    step="2" 
+                    value={selectedCredits} 
+                    onChange={(e) => setSelectedCredits(parseInt(e.target.value))}
+                    className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-purple-600"
+                  />
+                  <span className="text-sm text-gray-600 w-8">{selectedCredits}</span>
+                </div>
+                <div className="text-gray-600">
+                  <span className="text-purple-600 font-medium">{selectedCredits} credits</span> for <span className="text-purple-600 font-medium">${(selectedCredits * 1.25).toFixed(2)}</span>
+                </div>
+              </div>
+              
               <button
-                onClick={() => handleBuyCredits(2)}
-                className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"
+                onClick={() => handleBuyCredits(selectedCredits)}
+                className="px-6 py-2.5 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors shadow-sm"
               >
-                Buy 2 Credits for $2.50
+                Buy {selectedCredits} Credits for ${(selectedCredits * 1.25).toFixed(2)}
               </button>
             </div>
           )}
