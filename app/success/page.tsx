@@ -16,6 +16,7 @@ export default function SuccessPage() {
       const sessionId = searchParams.get('session_id');
       if (sessionId && userId) {
         try {
+          // Verify the payment
           const response = await fetch('/api/verify-payment', {
             method: 'POST',
             headers: {
@@ -25,6 +26,13 @@ export default function SuccessPage() {
           });
 
           if (response.ok) {
+            // Immediately fetch updated credits to refresh the state
+            try {
+              await fetch('/api/credits');
+            } catch (error) {
+              console.error('Error fetching updated credits:', error);
+            }
+            
             setStatus('success');
             // Redirect after a short delay to show success message
             setTimeout(() => router.push('/'), 2000);
@@ -61,7 +69,7 @@ export default function SuccessPage() {
         {status === 'success' && (
           <>
             <h1 className="text-2xl font-bold mb-4">Payment Successful!</h1>
-            <p className="text-gray-600">Your credits will be added shortly. Please wait while we redirect you...</p>
+            <p className="text-gray-600">Your credits have been added to your account. Redirecting you now...</p>
           </>
         )}
       </div>

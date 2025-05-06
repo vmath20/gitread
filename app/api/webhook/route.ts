@@ -30,24 +30,31 @@ export async function POST(req: NextRequest) {
       const credits = parseInt(session.metadata?.credits || '0');
 
       if (userId && credits) {
+        // Use consistent event_id format with verify-payment
+        const eventId = `session_${session.id}`;
+        
         // Check if this event has already been processed
         const { data: existingEvent } = await supabaseAdmin
           .from('processed_stripe_events')
           .select('id')
-          .eq('event_id', event.id)
+          .eq('event_id', eventId)
           .single();
         
         if (existingEvent) {
-          console.log(`Event ${event.id} already processed, skipping`);
+          console.log(`Event ${eventId} already processed, skipping`);
           return NextResponse.json({ received: true });
         }
 
         // Get current credits
-        const { data: currentCredits } = await supabaseAdmin
+        const { data: currentCredits, error: creditsError } = await supabaseAdmin
           .from('user_credits')
           .select('credits')
           .eq('user_id', userId)
           .single();
+          
+        if (creditsError && creditsError.code !== 'PGRST116') { // Not found error is ok
+          console.error('Error fetching current credits:', creditsError);
+        }
 
         // Add credits using service role
         const { error: updateError } = await supabaseAdmin
@@ -67,7 +74,7 @@ export async function POST(req: NextRequest) {
         const { error: insertError } = await supabaseAdmin
           .from('processed_stripe_events')
           .insert({
-            event_id: event.id,
+            event_id: eventId,
             user_id: userId,
             credits: credits,
             processed_at: new Date().toISOString()
@@ -78,7 +85,7 @@ export async function POST(req: NextRequest) {
           throw insertError;
         }
         
-        console.log(`Successfully processed event ${event.id} for user ${userId}`);
+        console.log(`Successfully processed event ${eventId} for user ${userId}, added ${credits} credits`);
       }
     }
 
