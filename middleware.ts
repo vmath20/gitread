@@ -18,6 +18,35 @@ function customRedirects(req: NextRequest) {
     return NextResponse.redirect(url)
   }
   
+  // Handle redirects from generatemyreadme.com/username/repository to gitread.dev with repo parameter
+  if (host === 'generatemyreadme.com' || host.endsWith('.generatemyreadme.com')) {
+    // Pattern for username/repository path format
+    if (pathname.match(/^\/[^\/]+\/[^\/]+$/)) {
+      // Extract the username and repository from the path
+      const [, username, repository] = pathname.split('/')
+      
+      // Create the GitHub URL
+      const githubUrl = `https://github.com/${username}/${repository}`
+      
+      // Redirect to gitread.dev with the repo URL as a parameter
+      const url = req.nextUrl.clone()
+      url.host = 'gitread.dev'
+      url.port = '' // Clear any port information
+      url.pathname = '/'
+      url.searchParams.set('repo', githubUrl)
+      
+      return NextResponse.redirect(url)
+    }
+    
+    // If path doesn't match username/repository pattern, just redirect to gitread.dev
+    if (!hasRepoParam) {
+      const url = req.nextUrl.clone()
+      url.host = 'gitread.dev'
+      url.port = '' // Clear any port information
+      return NextResponse.redirect(url)
+    }
+  }
+  
   // Pattern for username/repository path format that doesn't conflict with known app routes
   if (pathname.match(/^\/[^\/]+\/[^\/]+$/) && 
       !pathname.startsWith('/api/') && 
