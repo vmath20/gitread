@@ -440,10 +440,10 @@ export default function Home() {
                   />
                   
                   <div className="flex justify-between text-xs text-gray-500 px-2 mt-2">
-                    <div>1</div>
-                    <div>10</div>
+                    <div>2</div>
                     <div>25</div>
                     <div>50</div>
+                    <div>100</div>
                   </div>
                 </div>
                 
