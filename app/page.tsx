@@ -451,7 +451,7 @@ export default function Home() {
                   <div className="flex justify-between items-center">
                     <div>
                       <div className="text-gray-600 text-sm">Total price:</div>
-                      <div className="text-3xl font-bold text-purple-600">${(selectedCredits * 1.25).toFixed(1)}</div>
+                      <div className="text-3xl font-bold text-purple-600">${(selectedCredits * 1.25).toFixed(2)}</div>
                     </div>
                     <div className="text-gray-600 text-sm">
                       $1.25 per credit
@@ -469,7 +469,7 @@ export default function Home() {
                       <line x1="1" y1="10" x2="23" y2="10"></line>
                     </svg>
                   </span>
-                  <span>Buy {selectedCredits} Credits for ${(selectedCredits * 1.25).toFixed(1)}</span>
+                  <span>Buy {selectedCredits} Credits for ${(selectedCredits * 1.25).toFixed(2)}</span>
                 </button>
                 
                 <div className="flex justify-center items-center text-sm text-gray-500">
