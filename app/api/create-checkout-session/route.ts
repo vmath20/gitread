@@ -25,7 +25,7 @@ export async function POST(req: NextRequest) {
               name: 'Credits',
               description: `${credits} README generation credits`,
             },
-            unit_amount: credits * 100, // $1 per credit
+            unit_amount: credits * 125, // $1.25 per credit
           },
           quantity: 1,
         },

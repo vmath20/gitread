@@ -102,7 +102,16 @@ def process_repo(repo_url):
             print("Traceback:", file=sys.stderr)
             traceback.print_exc(file=sys.stderr)
             
-            if "Maximum file size limit" in error_message:
+            # Improved error detection for specific error types
+            if "not found" in error_message.lower() or "404" in error_message:
+                error_message = "Repository not found or is private. Please check the URL and ensure you have access permission."
+            elif "rate limit" in error_message.lower() or "rate_limit" in error_message.lower():
+                error_message = "GitHub API rate limit exceeded. Please try again later."
+            elif "timeout" in error_message.lower() or "timed out" in error_message.lower():
+                error_message = "Request timed out while processing the repository. Please try a smaller repository."
+            elif "authentication" in error_message.lower() or "auth" in error_message.lower() or "permission" in error_message.lower():
+                error_message = "Authentication failed or insufficient permissions. The repository may be private."
+            elif "Maximum file size limit" in error_message:
                 error_message = f"Repository contains files larger than the maximum allowed size of {format_size(MAX_FILE_SIZE)}"
             elif "Maximum number of files" in error_message:
                 error_message = f"Repository exceeds the maximum allowed number of files ({MAX_FILES:,})"

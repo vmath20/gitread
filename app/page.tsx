@@ -9,13 +9,14 @@ import { getUserCredits, setUserCredits, saveGeneratedReadme, getGeneratedReadme
 import { getStripe } from './utils/stripe'
 import LoadingIndicator from './components/LoadingIndicator'
 import ThemeToggle from './components/ThemeToggle'
+import rehypeRaw from 'rehype-raw'
 
 export default function Home() {
   const [repoUrl, setRepoUrl] = useState('')
   const [loading, setLoading] = useState(false)
   const [readme, setReadme] = useState('')
   const [viewMode, setViewMode] = useState<'markdown' | 'preview'>('preview')
-  const [credits, setCredits] = useState(5)
+  const [credits, setCredits] = useState(1)
   const [errorMessage, setErrorMessage] = useState('')
   const [copyText, setCopyText] = useState('Copy')
   const { isSignedIn, userId } = useAuth()
@@ -28,30 +29,57 @@ export default function Home() {
     async function fetchCredits() {
       if (isSignedIn && userId) {
         try {
-          const userCredits = await getUserCredits(userId)
-          console.log('Initial credits loaded:', userCredits)
-          setCredits(userCredits)
+          const response = await fetch('/api/credits');
+          if (!response.ok) {
+            throw new Error(`Error fetching credits: ${response.statusText}`);
+          }
+          
+          const data = await response.json();
+          console.log('Initial credits loaded:', data.credits);
+          setCredits(data.credits);
         } catch (error) {
-          console.error('Error loading initial credits:', error)
+          console.error('Error loading initial credits:', error);
         }
       }
     }
-    fetchCredits()
+    fetchCredits();
+
+    // Check for repo URL parameter and automatically populate the input
+    const urlParams = new URLSearchParams(window.location.search)
+    const repoParam = urlParams.get('repo')
+    if (repoParam) {
+      setRepoUrl(repoParam)
+      // Optionally auto-submit
+      if (isSignedIn && credits > 0) {
+        // Use a timeout to ensure state updates have occurred
+        setTimeout(() => {
+          const submitButton = document.getElementById('submit-repo-button')
+          if (submitButton) {
+            submitButton.click()
+          }
+        }, 500)
+      }
+    }
   }, [isSignedIn, userId])
 
   useEffect(() => {
     async function fetchHistory() {
       if (isSignedIn && userId) {
         try {
-          const history = await getGeneratedReadmes(userId)
-          setReadmeHistory(history)
+          const response = await fetch('/api/readme-history');
+          if (!response.ok) {
+            throw new Error(`Error fetching README history: ${response.statusText}`);
+          }
+          
+          const data = await response.json();
+          setReadmeHistory(data.history);
         } catch (error) {
-          console.error('Error fetching README history:', error)
+          console.error('Error fetching README history:', error);
         }
       }
     }
-    fetchHistory()
-  }, [isSignedIn, userId])
+    fetchHistory();
+  }, [isSignedIn, userId]);
 
   useEffect(() => {
     let interval: NodeJS.Timeout;
@@ -60,8 +88,13 @@ export default function Home() {
       // Refresh credits every 30 seconds
       interval = setInterval(async () => {
         try {
-          const currentCredits = await getUserCredits(userId);
-          setCredits(currentCredits);
+          const response = await fetch('/api/credits');
+          if (!response.ok) {
+            throw new Error(`Error refreshing credits: ${response.statusText}`);
+          }
+          
+          const data = await response.json();
+          setCredits(data.credits);
         } catch (error) {
           console.error('Error refreshing credits:', error);
         }
@@ -105,6 +138,7 @@ export default function Home() {
       // Only proceed with API call and credit deduction for non-example repos
       if (credits <= 0) return
       
+      console.log("Submitting request for:", trimmedRepoUrl);
       const response = await fetch('/api/generate', {
         method: 'POST',
         headers: {
@@ -116,9 +150,34 @@ export default function Home() {
       })
       
       const data = await response.json()
+      console.log("API response:", response.status, data);
       
       if (!response.ok) {
-        throw new Error(data.error || 'Failed to generate README')
+        console.error('API error:', data.error);
+        
+        // Determine error type and appropriate icon
+        let errorIcon = '';
+        let errorClass = '';
+        
+        if (data.error?.includes('token limit')) {
+          errorIcon = '⚠️';
+          errorClass = 'bg-yellow-50 text-yellow-800';
+        } else if (data.error?.includes('private')) {
+          errorIcon = '🔒';
+          errorClass = 'bg-blue-50 text-blue-800';
+        } else if (data.error?.includes('rate limit') || data.error?.includes('API rate limit')) {
+          errorIcon = '🚫';
+          errorClass = 'bg-orange-50 text-orange-800';
+        } else if (data.error?.includes('timed out')) {
+          errorIcon = '⏱️';
+          errorClass = 'bg-purple-50 text-purple-800';
+        } else {
+          errorClass = 'bg-red-50 text-red-600';
+        }
+        
+        setErrorMessage(`${errorIcon} ${data.error}`);
+        setLoading(false);
+        return;
       }
       
       // Set README and word counts from API response
@@ -126,21 +185,57 @@ export default function Home() {
       setInputTokens(data.inputTokens)  // This will now be the actual word count
       setOutputTokens(data.outputTokens)
       
-      // Update credits and save README only for non-example repos
+      // Update credits using the new API endpoint
       if (userId) {
         try {
           const newCredits = credits - 1
-          await setUserCredits(userId, newCredits)
-          setCredits(newCredits)
           
-          // Save to history
-          await saveGeneratedReadme(userId, trimmedRepoUrl, data.readme)
-          const history = await getGeneratedReadmes(userId)
-          setReadmeHistory(history)
+          const creditsResponse = await fetch('/api/credits', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ credits: newCredits }),
+          });
+          
+          if (!creditsResponse.ok) {
+            throw new Error(`Failed to update credits: ${creditsResponse.statusText}`);
+          }
+          
+          const creditsData = await creditsResponse.json();
+          setCredits(creditsData.credits);
+          
+          // Save the README using the new API endpoint
+          const saveResponse = await fetch('/api/readme-history', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ 
+              repoUrl: trimmedRepoUrl, 
+              readmeContent: data.readme 
+            }),
+          });
+          
+          if (!saveResponse.ok) {
+            throw new Error(`Failed to save README: ${saveResponse.statusText}`);
+          }
+          
+          // Refresh README history
+          const historyResponse = await fetch('/api/readme-history');
+          if (historyResponse.ok) {
+            const historyData = await historyResponse.json();
+            setReadmeHistory(historyData.history);
+          }
         } catch (error) {
-          console.error('Error updating credits or history:', error)
-          const currentCredits = await getUserCredits(userId)
-          setCredits(currentCredits)
+          console.error('Error updating credits or history:', error);
+          
+          // Refresh credits from the server to ensure consistency
+          const refreshResponse = await fetch('/api/credits');
+          if (refreshResponse.ok) {
+            const refreshData = await refreshResponse.json();
+            setCredits(refreshData.credits);
+          }
         }
       }
       
@@ -148,7 +243,8 @@ export default function Home() {
     } catch (error) {
       console.error('Error:', error)
       if (!readme) {
-        setErrorMessage('Failed to generate README. Please try again.')
+        // This will now only catch network errors or other unexpected issues
+        setErrorMessage('Network error or other unexpected issue. Please try again.');
       }
     } finally {
       setLoading(false)
@@ -209,11 +305,10 @@ export default function Home() {
   }
 
   const exampleRepos = [
-    'nextjs/next.js',
-    'vercel/ai',
-    'shadcn/ui',
-    'tailwindlabs/tailwindcss',
-    'prisma/prisma'
+    'vmath20/IsoPath',
+    'marktext/marktext',
+    '3b1b/manim',
+    'mark3labs/mcp-go'
   ]
 
   const handleBuyCredits = async (creditAmount: number) => {
@@ -267,19 +362,28 @@ export default function Home() {
         </div>
 
         <div className="bg-white dark:bg-gray-800 rounded-3xl shadow-[0_8px_30px_rgb(0,0,0,0.04)] p-8">
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="flex gap-3">
+          <form onSubmit={handleSubmit} className="w-full max-w-3xl space-y-6">
+            <div className="flex flex-col md:flex-row w-full gap-2">
               <input
                 type="text"
                 value={repoUrl}
                 onChange={(e) => setRepoUrl(e.target.value)}
-                placeholder="https://github.com/username/repo"
-                className="flex-1 p-4 border rounded-2xl bg-white focus:outline-none focus:ring-1 focus:ring-gray-200 text-lg"
+                placeholder="Enter GitHub repository URL"
+                className="flex-grow shadow-sm rounded-lg px-4 py-2.5 border 
+                border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-purple-500 dark:text-white"
+                aria-label="GitHub repository URL"
+                aria-required="true"
               />
               <button
+                id="submit-repo-button"
                 type="submit"
-                disabled={loading || !isSignedIn || credits <= 0}
-                className="px-6 py-4 bg-purple-600 text-white rounded-2xl disabled:opacity-50 hover:bg-purple-700 transition-colors text-lg font-medium"
+                disabled={loading || !repoUrl || (!isSignedIn && credits <= 0)}
+                className={`rounded-lg px-6 py-2.5 text-white font-semibold shadow-sm
+                ${(!repoUrl || loading || (!isSignedIn && credits <= 0))
+                    ? 'bg-gray-400 dark:bg-gray-600'
+                    : 'bg-purple-600 hover:bg-purple-700 dark:bg-purple-700 dark:hover:bg-purple-800'
+                }`}
+                aria-busy={loading}
               >
                 Generate ✨
               </button>
@@ -287,8 +391,20 @@ export default function Home() {
             
             <div className="mt-2">
               {errorMessage && (
-                <div className="mt-4 p-4 bg-red-50 rounded-xl text-center">
-                  <p className="text-red-600">{errorMessage}</p>
+                <div className={`mt-4 p-4 ${
+                  errorMessage.includes('⚠️') ? 'bg-yellow-50 text-yellow-800' : 
+                  errorMessage.includes('🔒') ? 'bg-blue-50 text-blue-800' :
+                  errorMessage.includes('🚫') ? 'bg-orange-50 text-orange-800' :
+                  errorMessage.includes('⏱️') ? 'bg-purple-50 text-purple-800' :
+                  'bg-red-50 text-red-600'
+                } rounded-xl text-center`}>
+                  <p className={
+                    errorMessage.includes('⚠️') ? 'text-yellow-800' : 
+                    errorMessage.includes('🔒') ? 'text-blue-800' :
+                    errorMessage.includes('🚫') ? 'text-orange-800' :
+                    errorMessage.includes('⏱️') ? 'text-purple-800' :
+                    'text-red-600'
+                  }>{errorMessage}</p>
                 </div>
               )}
             </div>
@@ -298,10 +414,10 @@ export default function Home() {
             <div className="mt-4 p-4 bg-red-50 rounded-xl text-center">
               <p className="text-red-600 mb-2">You've used all your credits</p>
               <button
-                onClick={() => handleBuyCredits(10)}
+                onClick={() => handleBuyCredits(2)}
                 className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"
               >
-                Buy 10 Credits for $10
+                Buy 2 Credits for $2.50
               </button>
             </div>
           )}
@@ -398,7 +514,9 @@ export default function Home() {
                 />
               ) : (
                 <div className="prose prose-gray max-w-none">
-                  <ReactMarkdown>{readme}</ReactMarkdown>
+                  <ReactMarkdown rehypePlugins={[rehypeRaw]}>
+                    {readme}
+                  </ReactMarkdown>
                 </div>
               )}
             </div>
@@ -409,7 +527,9 @@ export default function Home() {
           <div className="mt-8">
             <div className="bg-white rounded-xl shadow-sm p-6 relative">
               <div className="prose prose-gray max-w-none opacity-50 blur-sm">
-                <ReactMarkdown>{readme}</ReactMarkdown>
+                <ReactMarkdown rehypePlugins={[rehypeRaw]}>
+                  {readme}
+                </ReactMarkdown>
               </div>
               <div className="absolute inset-0 flex items-center justify-center bg-white/50">
                 <div className="bg-white px-6 py-3 rounded-lg shadow-sm">

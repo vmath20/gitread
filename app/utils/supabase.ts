@@ -6,7 +6,10 @@ const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 // Create a Supabase client with the anon key for client-side operations
 export const supabase = createClient(supabaseUrl, supabaseKey)
 
-export async function getUserCredits(userId: string): Promise<number> {
+// Helper function to add delay
+const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms))
+
+export async function getUserCredits(userId: string, retries = 3): Promise<number> {
   try {
     console.log('Fetching credits for user:', userId)
     
@@ -18,75 +21,86 @@ export async function getUserCredits(userId: string): Promise<number> {
 
     if (error) {
       console.error('Error fetching credits:', error)
-      // If no record exists, create one with default credits
+      // If no record exists, create one with default credits using upsert instead of insert
       if (error.code === 'PGRST116') {
-        const { error: insertError } = await supabase
+        await sleep(500) // Add small delay before retry
+        const { data: upsertData, error: upsertError } = await supabase
           .from('user_credits')
-          .insert({ user_id: userId, credits: 5 })
+          .upsert({ 
+            user_id: userId, 
+            credits: 1,
+            updated_at: new Date().toISOString()
+          })
+          .select('credits')
+          .single()
         
-        if (insertError) {
-          console.error('Error creating user credits:', insertError)
-          return 5
+        if (upsertError) {
+          console.error('Error creating user credits:', upsertError)
+          if (retries > 0 && upsertError.code === '42501') {
+            console.log(`Retrying getUserCredits (${retries} retries left)...`)
+            await sleep(1000) // Wait a second before retrying
+            return getUserCredits(userId, retries - 1)
+          }
+          return 1
         }
-        return 5
+        
+        return upsertData?.credits ?? 1
       }
-      return 5
+      
+      if (retries > 0) {
+        console.log(`Retrying getUserCredits (${retries} retries left)...`)
+        await sleep(1000)
+        return getUserCredits(userId, retries - 1)
+      }
+      
+      return 1
     }
 
     console.log('Retrieved credits:', data?.credits)
-    return data?.credits ?? 5
+    return data?.credits ?? 1
   } catch (error) {
     console.error('Unexpected error fetching credits:', error)
-    return 5
+    if (retries > 0) {
+      console.log(`Retrying getUserCredits (${retries} retries left)...`)
+      await sleep(1000)
+      return getUserCredits(userId, retries - 1)
+    }
+    return 1
   }
 }
 
-export async function setUserCredits(userId: string, credits: number) {
+export async function setUserCredits(userId: string, credits: number, retries = 3) {
   try {
-    console.log('Starting credit update for user:', userId, 'new credits:', credits)
+    console.log('Setting credits for user:', userId, 'new credits:', credits)
     
-    // First check if the user exists
-    const { data: existingUser, error: checkError } = await supabase
+    // Use upsert instead of separate insert/update to avoid race conditions
+    const { error } = await supabase
       .from('user_credits')
-      .select('credits')
-      .eq('user_id', userId)
-      .single()
+      .upsert({
+        user_id: userId,
+        credits: credits,
+        updated_at: new Date().toISOString()
+      })
 
-    if (checkError) {
-      console.log('User not found, creating new record')
-      const { error: insertError } = await supabase
-        .from('user_credits')
-        .insert({
-          user_id: userId,
-          credits: credits,
-          updated_at: new Date().toISOString()
-        })
-
-      if (insertError) {
-        console.error('Error inserting credits:', insertError)
-        throw insertError
+    if (error) {
+      console.error('Error setting credits:', error)
+      if (retries > 0 && error.code === '42501') {
+        console.log(`Retrying setUserCredits (${retries} retries left)...`)
+        await sleep(1000) // Wait a second before retrying
+        return setUserCredits(userId, credits, retries - 1)
       }
-    } else {
-      console.log('User found, setting credits to', credits)
-      const { error: updateError } = await supabase
-        .from('user_credits')
-        .update({
-          credits: credits,
-          updated_at: new Date().toISOString()
-        })
-        .eq('user_id', userId)
-        .single()
-
-      if (updateError) {
-        console.error('Error updating credits:', updateError)
-        throw updateError
-      }
+      throw error
     }
     
     console.log('Credits set successfully')
     return true
   } catch (error) {
     console.error('Unexpected error setting credits:', error)
+    if (retries > 0) {
+      console.log(`Retrying setUserCredits (${retries} retries left)...`)
+      await sleep(1000)
+      return setUserCredits(userId, credits, retries - 1)
+    }
     throw error
   }
 }
@@ -175,44 +189,35 @@ export async function markStripeEventAsProcessed(eventId: string, userId: string
 }
 
 // Add credits to user's account (idempotent)
-export async function addUserCredits(userId: string, credits: number): Promise<void> {
+export async function addUserCredits(userId: string, creditsToAdd: number): Promise<void> {
   try {
-    // First check if the user exists
-    const { data: existingUser, error: checkError } = await supabase
+    console.log(`Adding ${creditsToAdd} credits to user ${userId}`)
+    
+    // First get current credits
+    const { data, error } = await supabase
       .from('user_credits')
       .select('credits')
       .eq('user_id', userId)
       .single()
+      
+    // Calculate new credit amount
+    const currentCredits = error ? 0 : (data?.credits || 0)
+    const newCredits = currentCredits + creditsToAdd
+    
+    console.log(`Current credits: ${currentCredits}, New credits: ${newCredits}`)
+    
+    // Use upsert to add credits
+    const { error: upsertError } = await supabase
+      .from('user_credits')
+      .upsert({
+        user_id: userId,
+        credits: newCredits,
+        updated_at: new Date().toISOString()
+      })
 
-    if (checkError) {
-      console.log('User not found, creating new record')
-      const { error: insertError } = await supabase
-        .from('user_credits')
-        .insert({
-          user_id: userId,
-          credits: credits,
-          updated_at: new Date().toISOString()
-        })
-
-      if (insertError) {
-        console.error('Error inserting credits:', insertError)
-        throw insertError
-      }
-    } else {
-      console.log('User found, adding credits')
-      const { error: updateError } = await supabase
-        .from('user_credits')
-        .update({
-          credits: existingUser.credits + credits,
-          updated_at: new Date().toISOString()
-        })
-        .eq('user_id', userId)
-        .single()
-
-      if (updateError) {
-        console.error('Error updating credits:', updateError)
-        throw updateError
-      }
+    if (upsertError) {
+      console.error('Error adding credits:', upsertError)
+      throw upsertError
     }
     
     console.log('Credits added successfully')
