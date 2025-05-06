@@ -19,7 +19,8 @@ function customRedirects(req: NextRequest) {
   }
   
   // Handle redirects from generatemyreadme.com/username/repository to gitread.dev with repo parameter
-  if (host === 'generatemyreadme.com' || host.endsWith('.generatemyreadme.com')) {
+  if (host === 'generatemyreadme.com' || host.endsWith('.generatemyreadme.com') ||
+      host === 'pleasegeneratemyreadmesoidonthaveto.com' || host.endsWith('.pleasegeneratemyreadmesoidonthaveto.com')) {
     // Pattern for username/repository path format
     if (pathname.match(/^\/[^\/]+\/[^\/]+$/)) {
       // Extract the username and repository from the path
