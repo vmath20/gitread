@@ -4,10 +4,13 @@ import type { NextRequest } from 'next/server'
 
 // First handle custom redirects, then apply Clerk authentication
 function customRedirects(req: NextRequest) {
-  const { pathname, host } = req.nextUrl
+  const { pathname, host, searchParams } = req.nextUrl
+  
+  // Skip domain redirect if a repo parameter is already present
+  const hasRepoParam = searchParams.has('repo')
   
   // Handle redirects from gitread.com to gitread.dev
-  if (host === 'gitread.com' || host.endsWith('.gitread.com')) {
+  if (!hasRepoParam && (host === 'gitread.com' || host.endsWith('.gitread.com'))) {
     // Create a redirect URL to gitread.dev with the same path
     const url = req.nextUrl.clone()
     url.host = 'gitread.dev'
