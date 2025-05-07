@@ -160,6 +160,8 @@ export default function Home() {
     setInputTokens(null)  // Set to null while processing
     setOutputTokens(0)    // Set to 0 while processing
     
+    let generatedReadme = '';
+    const creditsBefore = credits;
     try {
       let trimmedRepoUrl = repoUrl.endsWith('/') ? repoUrl.slice(0, -1) : repoUrl
       const repo = trimmedRepoUrl.replace('https://github.com/', '')
@@ -167,6 +169,7 @@ export default function Home() {
       if (repo in EXAMPLE_READMES) {
         // For example repos, just set the content directly without loading state
         setLoading(false)
+        setErrorMessage('');
         const exampleReadmeContent = EXAMPLE_READMES[repo as keyof typeof EXAMPLE_READMES]
         setReadme(exampleReadmeContent)
         
@@ -226,6 +229,7 @@ export default function Home() {
       
       // Set README and word counts from API response
       const receivedReadme = data.readme;
+      generatedReadme = receivedReadme;
       setReadme(receivedReadme);
       
       // Check if the readme content is empty or very short (likely failed generation)
@@ -296,14 +300,25 @@ export default function Home() {
     } catch (error) {
       console.error('Error:', error)
       // Only show error if there is no readme content at all
-      if (!readme) {
+      if (!generatedReadme) {
         setErrorMessage('⚠️ Please try again. If error persists, contact koyalhq@gmail.com');
       }
     } finally {
       setLoading(false)
-      // Only show error if there is no readme content and no error message
-      if (!readme && !errorMessage) {
+      // Only show error if there is no readme content and no error message, and not for example repos
+      const trimmedRepoUrl = repoUrl.endsWith('/') ? repoUrl.slice(0, -1) : repoUrl;
+      const repo = trimmedRepoUrl.replace('https://github.com/', '');
+      if (!generatedReadme && !errorMessage && !(repo in EXAMPLE_READMES)) {
         setErrorMessage('⚠️ Please try again. If error persists, contact koyalhq@gmail.com');
+      }
+      // Extra: If no readme, no error, and credits did not decrease, show a specific error (not for example repos)
+      if (
+        !(repo in EXAMPLE_READMES) &&
+        !generatedReadme &&
+        !errorMessage &&
+        credits === creditsBefore
+      ) {
+        setErrorMessage('❗ Something went wrong. No README was generated and your credits were not used. Please try again or contact support.');
       }
     }
   }
@@ -599,7 +614,10 @@ export default function Home() {
               {exampleRepos.map((repo) => (
                 <button
                   key={repo}
-                  onClick={() => setRepoUrl(`https://github.com/${repo}`)}
+                  onClick={() => {
+                    setRepoUrl(`https://github.com/${repo}`);
+                    setErrorMessage('');
+                  }}
                   className="px-4 py-2 text-base bg-gray-50 text-gray-600 rounded-full hover:bg-gray-100 transition-colors"
                 >
                   {repo}

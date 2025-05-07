@@ -2,7 +2,7 @@ export default function LoadingIndicator() {
   return (
     <div className="text-center mt-8 space-y-2">
       <div className="flex items-center justify-center gap-2">
-        <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-gray-900"></div>
+        <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-gray-900 dark:border-white"></div>
         <p className="text-gray-600 font-medium">
           Generating README
           <span className="animate-[ellipsis_1.5s_steps(4,jump-none)_infinite]">...</span>

@@ -5,7 +5,7 @@ export default function RefundPage() {
     <>
       <BackToHome />
       <div className="container mx-auto px-4 py-16 max-w-4xl">
-        <h1 className="text-4xl md:text-5xl font-bold mb-12 text-center">Refund Policy</h1>
+        <h1 className="text-4xl md:text-5xl font-bold mb-12 text-center text-gray-900 dark:text-white">Refund Policy</h1>
         <div className="prose dark:prose-invert max-w-none">
           <h2>1. Refund Reasons</h2>
           <p>Refunds will not be issued once the service has been delivered, regardless of the quality of the generated README files or whether they meet your specific expectations or requirements.</p>

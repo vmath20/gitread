@@ -5,7 +5,7 @@ export default function TermsPage() {
     <>
       <BackToHome />
       <div className="container mx-auto px-4 py-16 max-w-4xl">
-        <h1 className="text-4xl md:text-5xl font-bold mb-12 text-center">Terms of Service</h1>
+        <h1 className="text-4xl md:text-5xl font-bold mb-12 text-center text-gray-900 dark:text-white">Terms of Service</h1>
         <div className="prose dark:prose-invert max-w-none">
           <p className="text-sm text-gray-600 dark:text-gray-400 mb-8 italic">Last Updated: April 24, 2025</p>
 
