@@ -4,11 +4,12 @@ import React, { useState, useEffect } from 'react'
 import ReactMarkdown from 'react-markdown'
 import confetti from 'canvas-confetti'
 import { EXAMPLE_READMES } from './utils/example-readmes'
-import { SignInButton, SignUpButton, useAuth, UserButton } from '@clerk/nextjs'
+import { useAuth, UserButton } from '@clerk/nextjs'
 import { getUserCredits, setUserCredits, saveGeneratedReadme, getGeneratedReadmes } from './utils/supabase'
 import { getStripe } from './utils/stripe'
 import LoadingIndicator from './components/LoadingIndicator'
 import ThemeToggle from './components/ThemeToggle'
+import AuthModal from './components/AuthModal'
 import rehypeRaw from 'rehype-raw'
 
 export default function Home() {
@@ -25,6 +26,8 @@ export default function Home() {
   const [inputTokens, setInputTokens] = useState<number | null>(null)
   const [outputTokens, setOutputTokens] = useState<number>(0)
   const [selectedCredits, setSelectedCredits] = useState<number>(2)
+  const [showAuthModal, setShowAuthModal] = useState(false)
+  const [authMode, setAuthMode] = useState<'signin' | 'signup'>('signin')
 
   useEffect(() => {
     async function fetchCredits() {
@@ -111,6 +114,13 @@ export default function Home() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    
+    // If user is not signed in, show the auth modal instead of proceeding
+    if (!isSignedIn) {
+      setAuthMode('signin')
+      setShowAuthModal(true)
+      return
+    }
     
     setLoading(true)
     setErrorMessage('')
@@ -338,6 +348,14 @@ export default function Home() {
 
   return (
     <main className="min-h-screen bg-[#FBF9F5] dark:bg-gray-900 relative">
+      {/* Auth Modal */}
+      <AuthModal 
+        isOpen={showAuthModal}
+        onClose={() => setShowAuthModal(false)}
+        mode={authMode}
+        setMode={setAuthMode}
+      />
+      
       {isSignedIn && (
         <div className="absolute top-4 right-4 flex items-center gap-4">
           <div className="bg-white dark:bg-gray-800 px-4 py-2 rounded-full shadow-sm">
@@ -346,6 +364,21 @@ export default function Home() {
           </div>
           <ThemeToggle />
           <UserButton afterSignOutUrl="/" />
+        </div>
+      )}
+
+      {!isSignedIn && (
+        <div className="absolute top-4 right-4 flex items-center gap-4">
+          <ThemeToggle />
+          <button
+            onClick={() => {
+              setAuthMode('signin');
+              setShowAuthModal(true);
+            }}
+            className="px-5 py-2 bg-purple-600 hover:bg-purple-700 text-white font-medium rounded-lg transition-colors shadow-sm"
+          >
+            Sign In
+          </button>
         </div>
       )}
 
@@ -378,9 +411,9 @@ export default function Home() {
               <button
                 id="submit-repo-button"
                 type="submit"
-                disabled={loading || !repoUrl || (!isSignedIn && credits <= 0)}
+                disabled={loading || !repoUrl}
                 className={`rounded-lg px-6 py-2.5 text-white font-semibold shadow-sm
-                ${(!repoUrl || loading || (!isSignedIn && credits <= 0))
+                ${(!repoUrl || loading)
                     ? 'bg-gray-400 dark:bg-gray-600'
                     : 'bg-purple-600 hover:bg-purple-700 dark:bg-purple-700 dark:hover:bg-purple-800'
                 }`}
@@ -482,20 +515,34 @@ export default function Home() {
             </div>
           )}
 
+          {/* Sign-in prompt */}
           {!isSignedIn && (
-            <div className="mt-4 p-4 bg-gray-50 rounded-xl text-center">
-              <p className="text-gray-600 mb-4">Sign in to generate README files</p>
+            <div className="mt-4 p-6 bg-purple-50 dark:bg-purple-900/20 rounded-xl text-center">
+              <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">
+                Sign in to generate README files
+              </h3>
+              <p className="text-gray-600 dark:text-gray-300 mb-4">
+                Create an account to start generating professional README files for your GitHub repositories.
+              </p>
               <div className="flex gap-4 justify-center">
-                <SignInButton mode="modal">
-                  <button className="px-6 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors">
-                    Sign In
-                  </button>
-                </SignInButton>
-                <SignUpButton mode="modal">
-                  <button className="px-6 py-2 bg-black text-white rounded-lg hover:bg-gray-800 transition-colors">
-                    Sign Up
-                  </button>
-                </SignUpButton>
+                <button 
+                  onClick={() => {
+                    setAuthMode('signin');
+                    setShowAuthModal(true);
+                  }}
+                  className="px-6 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"
+                >
+                  Sign In
+                </button>
+                <button
+                  onClick={() => {
+                    setAuthMode('signup');
+                    setShowAuthModal(true);
+                  }}
+                  className="px-6 py-2 bg-black text-white rounded-lg hover:bg-gray-800 transition-colors"
+                >
+                  Sign Up
+                </button>
               </div>
             </div>
           )}
@@ -592,8 +639,17 @@ export default function Home() {
                 </ReactMarkdown>
               </div>
               <div className="absolute inset-0 flex items-center justify-center bg-white/50">
-                <div className="bg-white px-6 py-3 rounded-lg shadow-sm">
-                  <p className="text-gray-700 font-medium">Sign in to view the generated README</p>
+                <div className="text-center">
+                  <p className="text-gray-700 font-medium mb-4">Sign in to view the generated README</p>
+                  <button
+                    onClick={() => {
+                      setAuthMode('signin');
+                      setShowAuthModal(true);
+                    }}
+                    className="px-6 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"
+                  >
+                    Sign In Now
+                  </button>
                 </div>
               </div>
             </div>

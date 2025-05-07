@@ -124,8 +124,13 @@ export async function POST(req: NextRequest) {
     }, { status: 500 })
   }
 
-  // Get authentication
+  // Get authentication and require it
   const { userId } = getAuth(req)
+  if (!userId) {
+    return NextResponse.json({ 
+      error: "Authentication required. Please sign in to generate README files."
+    }, { status: 401 })
+  }
   
   try {
     const { repoUrl } = await req.json()
@@ -138,63 +143,57 @@ export async function POST(req: NextRequest) {
       }, { status: 400 })
     }
     
-    // Only check credits if user is authenticated
-    if (userId) {
-      try {
-        // Get user credits using service role
-        const { data, error } = await supabaseAdmin
-          .from('user_credits')
-          .select('credits')
-          .eq('user_id', userId)
-          .single()
-          
-        if (error) {
-          console.error("Error checking user credits:", error)
-          
-          // If no record exists, create one with default credits
-          if (error.code === 'PGRST116') {
-            const { data: newData, error: upsertError } = await supabaseAdmin
-              .from('user_credits')
-              .upsert({ 
-                user_id: userId, 
-                credits: 1,
-                updated_at: new Date().toISOString()
-              })
-              .select('credits')
-              .single()
-              
-            if (upsertError) {
-              console.error('Error creating user credits:', upsertError)
-              return NextResponse.json({ 
-                error: "Error checking user credits. Please try again later."
-              }, { status: 500 })
-            }
+    // Check user credits
+    try {
+      // Get user credits using service role
+      const { data, error } = await supabaseAdmin
+        .from('user_credits')
+        .select('credits')
+        .eq('user_id', userId)
+        .single()
+        
+      if (error) {
+        console.error("Error checking user credits:", error)
+        
+        // If no record exists, create one with default credits
+        if (error.code === 'PGRST116') {
+          const { data: newData, error: upsertError } = await supabaseAdmin
+            .from('user_credits')
+            .upsert({ 
+              user_id: userId, 
+              credits: 1,
+              updated_at: new Date().toISOString()
+            })
+            .select('credits')
+            .single()
             
-            if (newData?.credits <= 0) {
-              return NextResponse.json({ 
-                error: "Insufficient credits. Please purchase more credits to continue."
-              }, { status: 402 })
-            }
-          } else {
+          if (upsertError) {
+            console.error('Error creating user credits:', upsertError)
             return NextResponse.json({ 
               error: "Error checking user credits. Please try again later."
             }, { status: 500 })
           }
-        } else if (data.credits <= 0) {
+          
+          if (newData?.credits <= 0) {
+            return NextResponse.json({ 
+              error: "Insufficient credits. Please purchase more credits to continue."
+            }, { status: 402 })
+          }
+        } else {
           return NextResponse.json({ 
-            error: "Insufficient credits. Please purchase more credits to continue."
-          }, { status: 402 })
+            error: "Error checking user credits. Please try again later."
+          }, { status: 500 })
         }
-      } catch (error) {
-        console.error("Error checking user credits:", error)
+      } else if (data.credits <= 0) {
         return NextResponse.json({ 
-          error: "Error checking user credits. Please try again later."
-        }, { status: 500 })
+          error: "Insufficient credits. Please purchase more credits to continue."
+        }, { status: 402 })
       }
-    } else {
-      // For direct URL access (non-authenticated users), allow a limited number of requests
-      // This could be enhanced with rate limiting based on IP address
-      console.log("⚠️ Anonymous request - no credit check")
+    } catch (error) {
+      console.error("Error checking user credits:", error)
+      return NextResponse.json({ 
+        error: "Error checking user credits. Please try again later."
+      }, { status: 500 })
     }
     
     // Create a temporary directory for this request

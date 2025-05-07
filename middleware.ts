@@ -73,7 +73,15 @@ function customRedirects(req: NextRequest) {
 
 // Export a middleware function that combines our custom logic with Clerk
 export default authMiddleware({
-  publicRoutes: ['/'],
+  publicRoutes: [
+    '/', 
+    '/terms',
+    '/privacy',
+    '/support',
+    '/api/health',
+    // Allow webhook routes or other public API endpoints if needed
+    // Don't include /api/generate, /api/credits, or /api/readme-history as these need auth
+  ],
   beforeAuth: (req) => {
     // Apply our custom redirects before auth
     return customRedirects(req)
