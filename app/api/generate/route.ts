@@ -205,88 +205,39 @@ export async function POST(req: NextRequest) {
       const repoPath = extractGitHubRepoPath(repoUrl);
       
       // Run GitIngest Python script using spawn
-      console.log("🟡 Running GitIngest for:", repoUrl)
+      console.log("🟡 Calling Python microservice for:", repoUrl)
       let gitIngestOutput: GitIngestOutput
       try {
-        const scriptPath = path.join(process.cwd(), 'scripts', 'git_ingest.py')
-        const pythonPath = path.join(process.cwd(), 'venv', 'bin', 'python3')
-        console.log("📜 Script path:", scriptPath)
-        console.log("🐍 Python path:", pythonPath)
-        
-        // Use spawn instead of exec to prevent command injection
-        const pythonProcess = spawn(pythonPath, [scriptPath, repoUrl])
-        
-        let stdout = ''
-        let stderr = ''
-        
-        pythonProcess.stdout.on('data', (data) => {
-          stdout += data.toString()
-        })
-        
-        pythonProcess.stderr.on('data', (data) => {
-          stderr += data.toString()
-        })
-        
-        const exitCode = await new Promise<number>((resolve) => {
-          pythonProcess.on('close', resolve)
-        })
-        
-        if (exitCode !== 0) {
-          console.error("❌ GitIngest stderr:", stderr)
-          
-          // Check for specific error types based on error output
-          if (stderr.includes("not found") || stderr.includes("404")) {
-            throw new Error(`Repository not found or is private. Please check the URL and ensure you have access permission.`)
-          } else if (stderr.includes("rate limit") || stderr.includes("rate_limit")) {
-            throw new Error(`GitHub API rate limit exceeded. Please try again later.`)
-          } else if (stderr.includes("timeout") || stderr.includes("timed out")) {
-            throw new Error(`Request timed out while processing the repository. Please try a smaller repository.`)
-          }
-          
-          throw new Error(`GitIngest script failed with exit code ${exitCode}. Stderr: ${stderr}`)
+        const pythonApiUrl = "https://gitread-api.onrender.com/ingest";
+        const pythonApiKey = process.env.PYTHON_API_KEY!; // Set this in your env
+
+        const response = await fetch(pythonApiUrl, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "x-api-key": pythonApiKey,
+          },
+          body: JSON.stringify({ repo_url: repoUrl }),
+        });
+
+        const data = await response.json();
+        if (data.error) {
+          throw new Error(data.error);
         }
-        
-        try {
-          gitIngestOutput = JSON.parse(stdout)
-          console.log("✅ Successfully parsed GitIngest output")
-        } catch (parseError) {
-          console.error("❌ Failed to parse GitIngest output:", stdout)
-          throw new Error(`Failed to parse GitIngest output: ${parseError.message}`)
-        }
+        gitIngestOutput = typeof data === "string" ? JSON.parse(data) : data;
       } catch (error: any) {
-        console.error("❌ GitIngest error:", error.message)
-        console.error("Error details:", error)
+        console.error("❌ Error:", error)
+        console.error("Error stack:", error.stack)
         
-        // Extract a concise error message from the verbose GitIngest error output
-        let errorMessage = error.message;
+        // Extract a concise error message
+        let errorMessage = error.message || "An unknown error occurred";
         
-        // If it's a GitIngest error with stack trace, extract the core error message
-        if (errorMessage.startsWith('GitIngest script failed with exit code')) {
-          // Try to find specific error patterns in the message
-          const errorPatterns = [
-            { regex: /Repository not found, make sure it is public/i, message: "Repository not found or is private. Please check the URL and ensure you have access permission." },
-            { regex: /rate limit|rate_limit/i, message: "GitHub API rate limit exceeded. Please try again later." },
-            { regex: /timeout|timed out/i, message: "Request timed out while processing the repository. Please try a smaller repository." },
-            { regex: /authentication|auth|permission/i, message: "Authentication failed or insufficient permissions. The repository may be private." },
-            { regex: /Maximum file size limit/i, message: "Repository contains files larger than the maximum allowed size." },
-            { regex: /Maximum number of files/i, message: "Repository exceeds the maximum allowed number of files." }
-          ];
-          
-          // Check for specific error patterns
-          for (const pattern of errorPatterns) {
-            if (pattern.regex.test(errorMessage)) {
-              errorMessage = pattern.message;
-              break;
-            }
-          }
-          
-          // If no specific pattern matched, use a generic message
-          if (errorMessage.startsWith('GitIngest script failed with exit code')) {
-            errorMessage = "Failed to process the repository. Please check the URL and try again.";
-          }
+        // Avoid returning sensitive or verbose error information to the client
+        if (errorMessage.length > 150) {
+          errorMessage = "An unexpected error occurred. Please try again later.";
         }
         
-        throw new Error(errorMessage);
+        return NextResponse.json({ error: errorMessage }, { status: 500 })
       }
       
       if (gitIngestOutput.error) {
