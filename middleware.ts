@@ -1,4 +1,4 @@
-import { authMiddleware } from '@clerk/nextjs/server'
+import { clerkMiddleware, createRouteMatcher } from '@clerk/nextjs/server'
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 
@@ -71,21 +71,28 @@ function customRedirects(req: NextRequest) {
   return null // No redirect needed
 }
 
-// Export a middleware function that combines our custom logic with Clerk
-export default authMiddleware({
-  publicRoutes: [
-    '/', 
-    '/terms',
-    '/privacy',
-    '/support',
-    '/api/health',
-    // Allow webhook routes or other public API endpoints if needed
-    // Don't include /api/generate, /api/credits, or /api/readme-history as these need auth
-  ],
-  beforeAuth: (req) => {
-    // Apply our custom redirects before auth
-    return customRedirects(req)
+// Define public routes using createRouteMatcher
+const isPublicRoute = createRouteMatcher([
+  '/', 
+  '/terms', 
+  '/privacy', 
+  '/support',
+  '/api/health'
+])
+
+// Export middleware function that combines custom redirects with Clerk authentication
+export default clerkMiddleware(async (auth, req) => {
+  // Apply custom redirects first
+  const redirectResult = customRedirects(req);
+  if (redirectResult) return redirectResult;
+  
+  // If it's a public route, allow access
+  if (isPublicRoute(req)) {
+    return NextResponse.next();
   }
+  
+  // For protected routes, check authentication
+  // The middleware will handle authentication automatically for non-public routes
 })
 
 // See https://nextjs.org/docs/app/building-your-application/routing/middleware
