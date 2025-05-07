@@ -192,7 +192,16 @@ export default function Home() {
       }
       
       // Set README and word counts from API response
-      setReadme(data.readme)
+      const receivedReadme = data.readme;
+      
+      // Check if the readme content is empty or very short (likely failed generation)
+      if (!receivedReadme || receivedReadme.trim().length < 20) {
+        setErrorMessage('⚠️ Please try again. If error persists, contact koyalhq@gmail.com');
+        setLoading(false);
+        return;
+      }
+      
+      setReadme(receivedReadme)
       setInputTokens(data.inputTokens)  // This will now be the actual word count
       setOutputTokens(data.outputTokens)
       
@@ -254,11 +263,16 @@ export default function Home() {
     } catch (error) {
       console.error('Error:', error)
       if (!readme) {
-        // This will now only catch network errors or other unexpected issues
-        setErrorMessage('Network error or other unexpected issue. Please try again.');
+        // Show the general error message for any uncaught errors
+        setErrorMessage('⚠️ Please try again. If error persists, contact koyalhq@gmail.com');
       }
     } finally {
       setLoading(false)
+      
+      // Final check - if no readme was generated and no error message is shown yet, display the general error message
+      if (!readme && !errorMessage) {
+        setErrorMessage('⚠️ Please try again. If error persists, contact koyalhq@gmail.com');
+      }
     }
   }
 
