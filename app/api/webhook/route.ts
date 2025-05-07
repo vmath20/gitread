@@ -34,11 +34,16 @@ export async function POST(req: NextRequest) {
         const eventId = `session_${session.id}`;
         
         // Check if this event has already been processed
-        const { data: existingEvent } = await supabaseAdmin
+        const { data: existingEvent, error: existingError } = await supabaseAdmin
           .from('processed_stripe_events')
           .select('id')
           .eq('event_id', eventId)
           .single();
+        
+        if (existingError && existingError.code !== 'PGRST116') {
+          console.error('Error checking existing event:', existingError);
+          throw existingError;
+        }
         
         if (existingEvent) {
           console.log(`Event ${eventId} already processed, skipping`);
@@ -52,8 +57,9 @@ export async function POST(req: NextRequest) {
           .eq('user_id', userId)
           .single();
           
-        if (creditsError && creditsError.code !== 'PGRST116') { // Not found error is ok
+        if (creditsError && creditsError.code !== 'PGRST116') {
           console.error('Error fetching current credits:', creditsError);
+          throw creditsError;
         }
 
         // Add credits using service role

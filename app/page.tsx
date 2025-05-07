@@ -28,6 +28,11 @@ export default function Home() {
   const [selectedCredits, setSelectedCredits] = useState<number>(2)
   const [showAuthModal, setShowAuthModal] = useState(false)
   const [authMode, setAuthMode] = useState<'signin' | 'signup'>('signin')
+  
+  // Rate limiting state
+  const [isButtonCooldown, setIsButtonCooldown] = useState(false)
+  const [cooldownSeconds, setCooldownSeconds] = useState(0)
+  const COOLDOWN_PERIOD = 5 // 5 seconds cooldown
 
   useEffect(() => {
     async function fetchCredits() {
@@ -65,6 +70,24 @@ export default function Home() {
       }
     }
   }, [isSignedIn, userId])
+
+  // Handle cooldown timer countdown
+  useEffect(() => {
+    if (!isButtonCooldown) return;
+    
+    let timer: NodeJS.Timeout;
+    if (cooldownSeconds > 0) {
+      timer = setTimeout(() => {
+        setCooldownSeconds(seconds => seconds - 1);
+      }, 1000);
+    } else {
+      setIsButtonCooldown(false);
+    }
+    
+    return () => {
+      if (timer) clearTimeout(timer);
+    };
+  }, [cooldownSeconds, isButtonCooldown]);
 
   useEffect(() => {
     async function fetchHistory() {
@@ -115,12 +138,22 @@ export default function Home() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     
+    // Check for rate limiting
+    if (isButtonCooldown) {
+      setErrorMessage(`⏱️ Please wait ${cooldownSeconds} second${cooldownSeconds !== 1 ? 's' : ''} before generating another README.`);
+      return;
+    }
+    
     // If user is not signed in, show the auth modal instead of proceeding
     if (!isSignedIn) {
       setAuthMode('signin')
       setShowAuthModal(true)
       return
     }
+    
+    // Apply rate limiting
+    setIsButtonCooldown(true);
+    setCooldownSeconds(COOLDOWN_PERIOD);
     
     setLoading(true)
     setErrorMessage('')
@@ -193,15 +226,15 @@ export default function Home() {
       
       // Set README and word counts from API response
       const receivedReadme = data.readme;
+      setReadme(receivedReadme);
       
       // Check if the readme content is empty or very short (likely failed generation)
-      if (!receivedReadme || receivedReadme.trim().length < 20) {
+      if (!receivedReadme || receivedReadme.trim().length < 10) {
         setErrorMessage('⚠️ Please try again. If error persists, contact koyalhq@gmail.com');
         setLoading(false);
         return;
       }
       
-      setReadme(receivedReadme)
       setInputTokens(data.inputTokens)  // This will now be the actual word count
       setOutputTokens(data.outputTokens)
       
@@ -262,14 +295,13 @@ export default function Home() {
       showConfetti()
     } catch (error) {
       console.error('Error:', error)
+      // Only show error if there is no readme content at all
       if (!readme) {
-        // Show the general error message for any uncaught errors
         setErrorMessage('⚠️ Please try again. If error persists, contact koyalhq@gmail.com');
       }
     } finally {
       setLoading(false)
-      
-      // Final check - if no readme was generated and no error message is shown yet, display the general error message
+      // Only show error if there is no readme content and no error message
       if (!readme && !errorMessage) {
         setErrorMessage('⚠️ Please try again. If error persists, contact koyalhq@gmail.com');
       }

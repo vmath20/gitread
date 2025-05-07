@@ -28,23 +28,33 @@ export async function POST(req: NextRequest) {
       const credits = parseInt(session.metadata?.credits || '0');
       
       // Check if this session has been recorded in processed events
-      const { data: processedSession } = await supabaseAdmin
+      const { data: processedSession, error: processedError } = await supabaseAdmin
         .from('processed_stripe_events')
         .select('*')
         .eq('event_id', `session_${sessionId}`)
         .single();
+      
+      if (processedError && processedError.code !== 'PGRST116') {
+        console.error('Error checking processed session:', processedError);
+        throw processedError;
+      }
       
       // If webhook hasn't processed it yet, do it now as a fallback
       if (!processedSession && credits > 0) {
         console.log(`Session ${sessionId} not yet processed by webhook, adding credits now`);
         
         // Get current credits
-        const { data: currentCredits } = await supabaseAdmin
+        const { data: currentCredits, error: creditsError } = await supabaseAdmin
           .from('user_credits')
           .select('credits')
           .eq('user_id', userId)
           .single();
           
+        if (creditsError && creditsError.code !== 'PGRST116') {
+          console.error('Error fetching current credits:', creditsError);
+          throw creditsError;
+        }
+        
         // Add credits
         const { error: updateError } = await supabaseAdmin
           .from('user_credits')
@@ -60,7 +70,7 @@ export async function POST(req: NextRequest) {
         }
         
         // Mark as processed so webhook doesn't double-add
-        await supabaseAdmin
+        const { error: insertError } = await supabaseAdmin
           .from('processed_stripe_events')
           .insert({
             event_id: `session_${sessionId}`,
@@ -68,6 +78,13 @@ export async function POST(req: NextRequest) {
             credits: credits,
             processed_at: new Date().toISOString()
           });
+          
+        if (insertError) {
+          console.error('Error marking event as processed:', insertError);
+          throw insertError;
+        }
+      } else if (processedSession) {
+        console.log(`Session ${sessionId} already processed, skipping credit addition`);
       }
       
       return NextResponse.json({ success: true });
