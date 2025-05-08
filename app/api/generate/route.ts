@@ -137,6 +137,14 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: '🚦 Server is busy. Please try again in a few moments.' }, { status: 429 });
   }
 
+  // Calculate queue position (1-based)
+  const queuePosition = requestQueue.length + 1;
+
+  // If not first in queue, return queue position immediately
+  if (queuePosition > 1) {
+    return NextResponse.json({ message: 'Your request is in the queue.', queuePosition });
+  }
+
   // Wrap the main logic in a promise and push to the queue
   return await new Promise((resolve) => {
     requestQueue.push(async () => {
@@ -299,8 +307,7 @@ export async function POST(req: NextRequest) {
           const prompt = `Make a README for the following GitHub repository. Do not generate any placeholder text or placeholder images in the readme file. For all READMEs, add a DeepWiki badge to your README that links to your repo's DeepWiki. Do not add any badges except for the DeepWiki badge.
 
 To generate the DeepWiki badge: 
-<img src="https://devin.ai/assets/askdeepwiki.png" alt="Ask https://DeepWiki.com" height="20"/>
-Swap the URL at the end with your repo's DeepWiki link. It looks like this: https://deepwiki.com/${repoPath}
+[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/${repoPath})
 
 Directly output the README file without any additional text.\n\n\n
 Summary:\n${gitIngestOutput.summary}\n\n\n

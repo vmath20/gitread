@@ -34,6 +34,8 @@ export default function Home() {
   const [cooldownSeconds, setCooldownSeconds] = useState(0)
   const COOLDOWN_PERIOD = 5 // 5 seconds cooldown
 
+  const [queuePosition, setQueuePosition] = useState<number | null>(null)
+
   useEffect(() => {
     async function fetchCredits() {
       if (isSignedIn && userId) {
@@ -139,9 +141,11 @@ export default function Home() {
   useEffect(() => {
     const handleBeforeUnload = (e: BeforeUnloadEvent) => {
       if (loading) {
+        // Modern browsers show a generic message, but a non-empty string is required for the dialog to appear
+        const message = 'You have a README generation in progress. Are you sure you want to leave and lose progress?';
         e.preventDefault();
-        e.returnValue = 'A README is being generated. If you leave, you will lose progress.';
-        return e.returnValue;
+        e.returnValue = message;
+        return message;
       }
     };
     if (loading) {
@@ -178,6 +182,7 @@ export default function Home() {
     setErrorMessage('')
     setInputTokens(null)  // Set to null while processing
     setOutputTokens(0)    // Set to 0 while processing
+    setQueuePosition(null); // Reset queue position on new submit
     
     let generatedReadme = '';
     const creditsBefore = credits;
@@ -217,6 +222,15 @@ export default function Home() {
       
       const data = await response.json()
       console.log("API response:", response.status, data);
+      
+      if (data.queuePosition) {
+        setQueuePosition(data.queuePosition);
+        setLoading(true);
+        setErrorMessage('');
+        return;
+      } else {
+        setQueuePosition(null);
+      }
       
       if (!response.ok) {
         console.error('API error:', data.error);
@@ -326,6 +340,7 @@ export default function Home() {
       
       showConfetti()
     } catch (error) {
+      setQueuePosition(null);
       console.error('Error:', error)
       // Only show error if there is no readme content at all
       if (!generatedReadme) {
@@ -664,6 +679,12 @@ export default function Home() {
             </div>
           </div>
         </div>
+
+        {loading && queuePosition && (
+          <div className="mt-4 text-center text-orange-700 font-semibold">
+            🚦 You are #{queuePosition} in the queue. Please wait...
+          </div>
+        )}
 
         {loading && <LoadingIndicator />}
 
