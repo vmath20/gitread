@@ -14,6 +14,15 @@ export async function POST(req: NextRequest) {
     }
 
     const { credits } = await req.json();
+    // Input validation for credits
+    if (
+      typeof credits !== 'number' ||
+      !Number.isInteger(credits) ||
+      credits < 1 ||
+      credits > 100
+    ) {
+      return NextResponse.json({ error: 'Invalid credits value. Must be an integer between 1 and 100.' }, { status: 400 });
+    }
 
     const session = await stripe.checkout.sessions.create({
       payment_method_types: ['card'],

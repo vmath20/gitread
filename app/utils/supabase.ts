@@ -69,42 +69,6 @@ export async function getUserCredits(userId: string, retries = 3): Promise<numbe
   }
 }
 
-export async function setUserCredits(userId: string, credits: number, retries = 3) {
-  try {
-    console.log('Setting credits for user:', userId, 'new credits:', credits)
-    
-    // Use upsert instead of separate insert/update to avoid race conditions
-    const { error } = await supabase
-      .from('user_credits')
-      .upsert({
-        user_id: userId,
-        credits: credits,
-        updated_at: new Date().toISOString()
-      })
-
-    if (error) {
-      console.error('Error setting credits:', error)
-      if (retries > 0 && error.code === '42501') {
-        console.log(`Retrying setUserCredits (${retries} retries left)...`)
-        await sleep(1000) // Wait a second before retrying
-        return setUserCredits(userId, credits, retries - 1)
-      }
-      throw error
-    }
-    
-    console.log('Credits set successfully')
-    return true
-  } catch (error) {
-    console.error('Unexpected error setting credits:', error)
-    if (retries > 0) {
-      console.log(`Retrying setUserCredits (${retries} retries left)...`)
-      await sleep(1000)
-      return setUserCredits(userId, credits, retries - 1)
-    }
-    throw error
-  }
-}
-
 export async function saveGeneratedReadme(userId: string, repoUrl: string, readmeContent: string) {
   try {
     const { error } = await supabase
@@ -184,45 +148,6 @@ export async function markStripeEventAsProcessed(eventId: string, userId: string
     }
   } catch (error) {
     console.error('Unexpected error marking event as processed:', error)
-    throw error
-  }
-}
-
-// Add credits to user's account (idempotent)
-export async function addUserCredits(userId: string, creditsToAdd: number): Promise<void> {
-  try {
-    console.log(`Adding ${creditsToAdd} credits to user ${userId}`)
-    
-    // First get current credits
-    const { data, error } = await supabase
-      .from('user_credits')
-      .select('credits')
-      .eq('user_id', userId)
-      .single()
-      
-    // Calculate new credit amount
-    const currentCredits = error ? 0 : (data?.credits || 0)
-    const newCredits = currentCredits + creditsToAdd
-    
-    console.log(`Current credits: ${currentCredits}, New credits: ${newCredits}`)
-    
-    // Use upsert to add credits
-    const { error: upsertError } = await supabase
-      .from('user_credits')
-      .upsert({
-        user_id: userId,
-        credits: newCredits,
-        updated_at: new Date().toISOString()
-      })
-
-    if (upsertError) {
-      console.error('Error adding credits:', upsertError)
-      throw upsertError
-    }
-    
-    console.log('Credits added successfully')
-  } catch (error) {
-    console.error('Unexpected error adding credits:', error)
     throw error
   }
 } 
