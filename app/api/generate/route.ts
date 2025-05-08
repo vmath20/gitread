@@ -116,153 +116,187 @@ function extractGitHubRepoPath(url: string): string {
   }
 }
 
+// Simple in-memory queue for generation requests (single instance only)
+const MAX_QUEUE_SIZE = 20;
+const requestQueue: (() => Promise<void>)[] = [];
+let processing = false;
+
+async function processQueue() {
+  if (processing) return;
+  processing = true;
+  while (requestQueue.length > 0) {
+    const next = requestQueue.shift();
+    if (next) await next();
+  }
+  processing = false;
+}
+
 export async function POST(req: NextRequest) {
-  // Check if API key is set
-  if (!openRouterApiKey) {
-    return NextResponse.json({ 
-      error: "OpenRouter API key is not configured. Please set OPENROUTER_API_KEY in your environment variables."
-    }, { status: 500 })
+  // Overload detection: if queue is too long, return 429
+  if (requestQueue.length >= MAX_QUEUE_SIZE) {
+    return NextResponse.json({ error: '🚦 Server is busy. Please try again in a few moments.' }, { status: 429 });
   }
 
-  // Get authentication and require it
-  const { userId } = getAuth(req)
-  if (!userId) {
-    return NextResponse.json({ 
-      error: "Authentication required. Please sign in to generate README files."
-    }, { status: 401 })
-  }
-  
-  try {
-    const { repoUrl } = await req.json()
-    console.log("🔗 Processing repository URL:", repoUrl)
+  // Wrap the main logic in a promise and push to the queue
+  return await new Promise((resolve) => {
+    requestQueue.push(async () => {
+      try {
+        // Check if API key is set
+        if (!openRouterApiKey) {
+          resolve(NextResponse.json({ 
+            error: "OpenRouter API key is not configured. Please set OPENROUTER_API_KEY in your environment variables."
+          }, { status: 500 }))
+          return;
+        }
 
-    // Strict URL validation
-    if (!isValidGitHubUrl(repoUrl)) {
-      return NextResponse.json({ 
-        error: "Invalid repository URL. Please provide a valid GitHub repository URL in the format: https://github.com/username/repository"
-      }, { status: 400 })
-    }
-    
-    // Check user credits
-    try {
-      // Get user credits using service role
-      const { data, error } = await supabaseAdmin
-        .from('user_credits')
-        .select('credits')
-        .eq('user_id', userId)
-        .single()
+        // Get authentication and require it
+        const { userId } = getAuth(req)
+        if (!userId) {
+          resolve(NextResponse.json({ 
+            error: "Authentication required. Please sign in to generate README files."
+          }, { status: 401 }))
+          return;
+        }
         
-      if (error) {
-        console.error("Error checking user credits:", error)
+        const { repoUrl } = await req.json()
+        console.log("🔗 Processing repository URL:", repoUrl)
+
+        // Strict URL validation
+        if (!isValidGitHubUrl(repoUrl)) {
+          resolve(NextResponse.json({ 
+            error: "Invalid repository URL. Please provide a valid GitHub repository URL in the format: https://github.com/username/repository"
+          }, { status: 400 }))
+          return;
+        }
         
-        // If no record exists, create one with default credits
-        if (error.code === 'PGRST116') {
-          const { data: newData, error: upsertError } = await supabaseAdmin
+        // Check user credits
+        try {
+          // Get user credits using service role
+          const { data, error } = await supabaseAdmin
             .from('user_credits')
-            .upsert({ 
-              user_id: userId, 
-              credits: 1,
-              updated_at: new Date().toISOString()
-            })
             .select('credits')
+            .eq('user_id', userId)
             .single()
+          
+          if (error) {
+            console.error("Error checking user credits:", error)
             
-          if (upsertError) {
-            console.error('Error creating user credits:', upsertError)
-            return NextResponse.json({ 
-              error: "Error checking user credits. Please try again later."
-            }, { status: 500 })
+            // If no record exists, create one with default credits
+            if (error.code === 'PGRST116') {
+              const { data: newData, error: upsertError } = await supabaseAdmin
+                .from('user_credits')
+                .upsert({ 
+                  user_id: userId, 
+                  credits: 1,
+                  updated_at: new Date().toISOString()
+                })
+                .select('credits')
+                .single()
+                
+              if (upsertError) {
+                console.error('Error creating user credits:', upsertError)
+                resolve(NextResponse.json({ 
+                  error: "Error checking user credits. Please try again later."
+                }, { status: 500 }))
+                return;
+              }
+              
+              if (newData?.credits <= 0) {
+                resolve(NextResponse.json({ 
+                  error: "Insufficient credits. Please purchase more credits to continue."
+                }, { status: 402 }))
+                return;
+              }
+            } else {
+              resolve(NextResponse.json({ 
+                error: "Error checking user credits. Please try again later."
+              }, { status: 500 }))
+              return;
+            }
+          } else if (data.credits <= 0) {
+            resolve(NextResponse.json({ 
+              error: "Insufficient credits. Please purchase more credits to continue."
+            }, { status: 402 }))
+            return;
+          }
+        } catch (error) {
+          console.error("Error checking user credits:", error)
+          resolve(NextResponse.json({ 
+            error: "Error checking user credits. Please try again later."
+          }, { status: 500 }))
+          return;
+        }
+        
+        // Create a temporary directory for this request
+        const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'gitingest-'))
+        console.log("📁 Created temporary directory:", tempDir)
+        
+        try {
+          // Extract GitHub repository path for DeepWiki URL
+          const repoPath = extractGitHubRepoPath(repoUrl);
+          
+          // Run GitIngest Python script using spawn
+          console.log("🟡 Calling Python microservice for:", repoUrl)
+          let gitIngestOutput: GitIngestOutput
+          try {
+            const pythonApiUrl = "https://gitread-api.onrender.com/ingest";
+            const pythonApiKey = process.env.PYTHON_API_KEY!; // Set this in your env
+
+            const response = await fetch(pythonApiUrl, {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                "x-api-key": pythonApiKey,
+              },
+              body: JSON.stringify({ repo_url: repoUrl }),
+            });
+
+            const data = await response.json();
+            if (data.error) {
+              throw new Error(data.error);
+            }
+            gitIngestOutput = typeof data === "string" ? JSON.parse(data) : data;
+          } catch (error: any) {
+            console.error("❌ Error:", error)
+            console.error("Error stack:", error.stack)
+            
+            // Extract a concise error message
+            let errorMessage = error.message || "An unknown error occurred";
+            
+            // Avoid returning sensitive or verbose error information to the client
+            if (errorMessage.length > 150) {
+              errorMessage = "An unexpected error occurred. Please try again later.";
+            }
+            
+            resolve(NextResponse.json({ error: errorMessage }, { status: 500 }))
+            return;
           }
           
-          if (newData?.credits <= 0) {
-            return NextResponse.json({ 
-              error: "Insufficient credits. Please purchase more credits to continue."
-            }, { status: 402 })
+          if (gitIngestOutput.error) {
+            console.log("⚠️ GitIngest returned error:", gitIngestOutput.error)
+            resolve(NextResponse.json({ 
+              error: gitIngestOutput.error,
+              limits: gitIngestOutput.limits
+            }, { status: 400 }))
+            return;
           }
-        } else {
-          return NextResponse.json({ 
-            error: "Error checking user credits. Please try again later."
-          }, { status: 500 })
-        }
-      } else if (data.credits <= 0) {
-        return NextResponse.json({ 
-          error: "Insufficient credits. Please purchase more credits to continue."
-        }, { status: 402 })
-      }
-    } catch (error) {
-      console.error("Error checking user credits:", error)
-      return NextResponse.json({ 
-        error: "Error checking user credits. Please try again later."
-      }, { status: 500 })
-    }
-    
-    // Create a temporary directory for this request
-    const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'gitingest-'))
-    console.log("📁 Created temporary directory:", tempDir)
-    
-    try {
-      // Extract GitHub repository path for DeepWiki URL
-      const repoPath = extractGitHubRepoPath(repoUrl);
-      
-      // Run GitIngest Python script using spawn
-      console.log("🟡 Calling Python microservice for:", repoUrl)
-      let gitIngestOutput: GitIngestOutput
-      try {
-        const pythonApiUrl = "https://gitread-api.onrender.com/ingest";
-        const pythonApiKey = process.env.PYTHON_API_KEY!; // Set this in your env
-
-        const response = await fetch(pythonApiUrl, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "x-api-key": pythonApiKey,
-          },
-          body: JSON.stringify({ repo_url: repoUrl }),
-        });
-
-        const data = await response.json();
-        if (data.error) {
-          throw new Error(data.error);
-        }
-        gitIngestOutput = typeof data === "string" ? JSON.parse(data) : data;
-      } catch (error: any) {
-        console.error("❌ Error:", error)
-        console.error("Error stack:", error.stack)
-        
-        // Extract a concise error message
-        let errorMessage = error.message || "An unknown error occurred";
-        
-        // Avoid returning sensitive or verbose error information to the client
-        if (errorMessage.length > 150) {
-          errorMessage = "An unexpected error occurred. Please try again later.";
-        }
-        
-        return NextResponse.json({ error: errorMessage }, { status: 500 })
-      }
-      
-      if (gitIngestOutput.error) {
-        console.log("⚠️ GitIngest returned error:", gitIngestOutput.error)
-        return NextResponse.json({ 
-          error: gitIngestOutput.error,
-          limits: gitIngestOutput.limits
-        }, { status: 400 })
-      }
-      
-      // Use estimated tokens if available, otherwise count words
-      const inputTokens = gitIngestOutput.estimated_tokens || countWords(gitIngestOutput.content)
-      console.log("📝 Input tokens:", inputTokens)
-      
-      // Check if input tokens exceed the limit
-      if (inputTokens > (gitIngestOutput.limits?.max_input_tokens || 250_000)) {
-        console.log("⚠️ Token limit exceeded")
-        return NextResponse.json({ 
-          error: `Repository content exceeds maximum token limit of ${gitIngestOutput.limits?.max_input_tokens.toLocaleString()} tokens (estimated ${inputTokens.toLocaleString()} tokens)`,
-          limits: gitIngestOutput.limits
-        }, { status: 400 })
-      }
-      
-      // Create prompt for the model
-      const prompt = `Make a README for the following GitHub repository. Do not generate any placeholder text or placeholder images in the readme file. For all READMEs, add a DeepWiki badge to your README that links to your repo's DeepWiki. Do not add any badges except for the DeepWiki badge.
+          
+          // Use estimated tokens if available, otherwise count words
+          const inputTokens = gitIngestOutput.estimated_tokens || countWords(gitIngestOutput.content)
+          console.log("📝 Input tokens:", inputTokens)
+          
+          // Check if input tokens exceed the limit
+          if (inputTokens > (gitIngestOutput.limits?.max_input_tokens || 250_000)) {
+            console.log("⚠️ Token limit exceeded")
+            resolve(NextResponse.json({ 
+              error: `Repository content exceeds maximum token limit of ${gitIngestOutput.limits?.max_input_tokens.toLocaleString()} tokens (estimated ${inputTokens.toLocaleString()} tokens)`,
+              limits: gitIngestOutput.limits
+            }, { status: 400 }))
+            return;
+          }
+          
+          // Create prompt for the model
+          const prompt = `Make a README for the following GitHub repository. Do not generate any placeholder text or placeholder images in the readme file. For all READMEs, add a DeepWiki badge to your README that links to your repo's DeepWiki. Do not add any badges except for the DeepWiki badge.
 
 To generate the DeepWiki badge: 
 <img src="https://devin.ai/assets/askdeepwiki.png" alt="Ask https://DeepWiki.com" height="20"/>
@@ -273,130 +307,128 @@ Summary:\n${gitIngestOutput.summary}\n\n\n
 Tree:\n${gitIngestOutput.tree}\n\n\n
 Content:\n${gitIngestOutput.content}`
 
-      // Generate README using Gemini
-      console.log("🤖 Generating README with Gemini...")
-      let response
-      try {
-        response = await client.chat.completions.create({
-          model: "google/gemini-2.5-pro-preview-03-25",
-          messages: [
-            { role: "system", content: "You are an expert technical writer." },
-            { role: "user", content: prompt }
-          ]
-        })
-      } catch (error: any) {
-        console.error("❌ OpenRouter API error:", error)
-        
-        // Check for rate limit errors from OpenRouter
-        if (error.message?.includes("rate") || error.message?.includes("quota") || error.status === 429) {
-          throw new Error(`API rate limit exceeded. Please try again later.`)
-        }
-        
-        throw error
-      }
-      
-      // Clean up the markdown code block markers
-      let readme = response.choices[0].message.content || ''
-      readme = readme.replace(/^```markdown\n?/, '')
-      readme = readme.replace(/```$/, '')
-      readme = readme.trim()
-
-      // Count output words
-      const outputTokens = countWords(readme)
-      console.log("📝 Output tokens:", outputTokens)
-
-      // Only update credits for authenticated users
-      if (userId) {
-        try {
-          // Get current credits
-          const { data, error } = await supabaseAdmin
-            .from('user_credits')
-            .select('credits')
-            .eq('user_id', userId)
-            .single()
-          
-          if (error) {
-            console.error("Error fetching user credits:", error)
+          // Generate README using Gemini
+          console.log("🤖 Generating README with Gemini...")
+          let response
+          try {
+            response = await client.chat.completions.create({
+              model: "google/gemini-2.5-pro-preview-03-25",
+              messages: [
+                { role: "system", content: "You are an expert technical writer." },
+                { role: "user", content: prompt }
+              ]
+            })
+          } catch (error: any) {
+            console.error("❌ OpenRouter API error:", error)
+            
+            // Check for rate limit errors from OpenRouter
+            if (error.message?.includes("rate") || error.message?.includes("quota") || error.status === 429) {
+              throw new Error(`API rate limit exceeded. Please try again later.`)
+            }
+            
             throw error
           }
           
-          // Update credits using service role
-          const newCredits = (data?.credits || 1) - 1
+          // Clean up the markdown code block markers
+          let readme = response.choices[0].message.content || ''
+          readme = readme.replace(/^```markdown\n?/, '')
+          readme = readme.replace(/```$/, '')
+          readme = readme.trim()
+
+          // Count output words
+          const outputTokens = countWords(readme)
+          console.log("📝 Output tokens:", outputTokens)
+
+          // Only update credits for authenticated users
+          if (userId) {
+            try {
+              // Get current credits
+              const { data, error } = await supabaseAdmin
+                .from('user_credits')
+                .select('credits')
+                .eq('user_id', userId)
+                .single()
+              
+              if (error) {
+                console.error("Error fetching user credits:", error)
+                throw error
+              }
+              
+              // Update credits using service role
+              const newCredits = (data?.credits || 1) - 1
+              
+              const { error: updateError } = await supabaseAdmin
+                .from('user_credits')
+                .upsert({
+                  user_id: userId,
+                  credits: newCredits,
+                  updated_at: new Date().toISOString()
+                })
+              
+              if (updateError) {
+                console.error("Error updating user credits:", updateError)
+                throw updateError
+              }
+              
+              // NOTE: README saving has been moved to the client-side in page.tsx
+              // to prevent duplicate entries in history
+              
+              console.log("✅ User credits updated successfully")
+            } catch (error) {
+              console.error("❌ Error updating user credits:", error)
+              // Continue despite error, as README has been generated
+            }
+          }
+
+          resolve(NextResponse.json({ 
+            readme,
+            inputTokens,
+            outputTokens,
+            warnings: gitIngestOutput.warnings,
+            limits: gitIngestOutput.limits
+          }))
+        } catch (error: any) {
+          console.error("❌ Error:", error)
+          console.error("Error stack:", error.stack)
           
-          const { error: updateError } = await supabaseAdmin
-            .from('user_credits')
-            .upsert({
-              user_id: userId,
-              credits: newCredits,
-              updated_at: new Date().toISOString()
-            })
+          // Extract a concise error message
+          let errorMessage = error.message || "An unknown error occurred";
           
-          if (updateError) {
-            console.error("Error updating user credits:", updateError)
-            throw updateError
+          // Avoid returning sensitive or verbose error information to the client
+          if (errorMessage.length > 150) {
+            // Check for known error patterns in the verbose message
+            if (errorMessage.includes("Repository not found")) {
+              errorMessage = "Repository not found or is private. Please check the URL.";
+            } else if (errorMessage.includes("rate limit")) {
+              errorMessage = "API rate limit exceeded. Please try again later.";
+            } else if (errorMessage.includes("timeout")) {
+              errorMessage = "Request timed out. Please try a smaller repository.";
+            } else {
+              // If no specific pattern, use a generic message
+              errorMessage = "Error processing repository. Please check the URL and try again.";
+            }
           }
           
-          // NOTE: README saving has been moved to the client-side in page.tsx
-          // to prevent duplicate entries in history
-          
-          console.log("✅ User credits updated successfully")
-        } catch (error) {
-          console.error("❌ Error updating user credits:", error)
-          // Continue despite error, as README has been generated
+          resolve(NextResponse.json({ error: errorMessage }, { status: 500 }))
+        } finally {
+          // Clean up temporary directory
+          try {
+            console.log("🧹 Cleaning up temporary directory:", tempDir)
+            await fs.rm(tempDir, { recursive: true, force: true })
+            console.log("✅ Cleanup complete")
+          } catch (error) {
+            console.error("❌ Error cleaning up temporary directory:", error)
+          }
         }
-      }
-
-      return NextResponse.json({ 
-        readme,
-        inputTokens,
-        outputTokens,
-        warnings: gitIngestOutput.warnings,
-        limits: gitIngestOutput.limits
-      })
-    } catch (error: any) {
-      console.error("❌ Error:", error)
-      console.error("Error stack:", error.stack)
-      
-      // Extract a concise error message
-      let errorMessage = error.message || "An unknown error occurred";
-      
-      // Avoid returning sensitive or verbose error information to the client
-      if (errorMessage.length > 150) {
-        // Check for known error patterns in the verbose message
-        if (errorMessage.includes("Repository not found")) {
-          errorMessage = "Repository not found or is private. Please check the URL.";
-        } else if (errorMessage.includes("rate limit")) {
-          errorMessage = "API rate limit exceeded. Please try again later.";
-        } else if (errorMessage.includes("timeout")) {
-          errorMessage = "Request timed out. Please try a smaller repository.";
-        } else {
-          // If no specific pattern, use a generic message
-          errorMessage = "Error processing repository. Please check the URL and try again.";
-        }
-      }
-      
-      return NextResponse.json({ error: errorMessage }, { status: 500 })
-    } finally {
-      // Clean up temporary directory
-      try {
-        console.log("🧹 Cleaning up temporary directory:", tempDir)
-        await fs.rm(tempDir, { recursive: true, force: true })
-        console.log("✅ Cleanup complete")
       } catch (error) {
-        console.error("❌ Error cleaning up temporary directory:", error)
+        // Handle errors and resolve
+        resolve(NextResponse.json({ error: 'An unexpected error occurred.' }, { status: 500 }))
+      } finally {
+        // After processing, process the next item in the queue
+        processQueue();
       }
-    }
-  } catch (error: any) {
-    console.error("❌ Error processing request:", error)
-    
-    // Extract a concise error message
-    let errorMessage = error.message || "An unknown error occurred";
-    
-    // Avoid returning sensitive or verbose error information to the client
-    if (errorMessage.length > 150) {
-      errorMessage = "An unexpected error occurred. Please try again later.";
-    }
-    
-    return NextResponse.json({ error: errorMessage }, { status: 500 })
-  }
+    });
+    // Start processing if not already
+    processQueue();
+  });
 } 

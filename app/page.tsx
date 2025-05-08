@@ -135,6 +135,25 @@ export default function Home() {
     };
   }, [isSignedIn, userId]);
 
+  // Warn user if they try to leave while generating a README
+  useEffect(() => {
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (loading) {
+        e.preventDefault();
+        e.returnValue = 'A README is being generated. If you leave, you will lose progress.';
+        return e.returnValue;
+      }
+    };
+    if (loading) {
+      window.addEventListener('beforeunload', handleBeforeUnload);
+    } else {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+    }
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+    };
+  }, [loading]);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     
@@ -205,6 +224,15 @@ export default function Home() {
         // Determine error type and appropriate icon
         let errorIcon = '';
         let errorClass = '';
+        
+        if (response.status === 429) {
+          // Special handling for server busy/queue full
+          errorIcon = '🚦';
+          errorClass = 'bg-orange-50 text-orange-800';
+          setErrorMessage(`${errorIcon} The server is currently handling too many requests. Please wait a moment and try again.`);
+          setLoading(false);
+          return;
+        }
         
         if (data.error?.includes('token limit')) {
           errorIcon = '⚠️';
@@ -487,6 +515,7 @@ export default function Home() {
             <div className="mt-2">
               {errorMessage && (
                 <div className={`mt-4 p-4 ${
+                  errorMessage.includes('🚦') ? 'bg-orange-50 text-orange-800' :
                   errorMessage.includes('⚠️') ? 'bg-yellow-50 text-yellow-800' : 
                   errorMessage.includes('🔒') ? 'bg-blue-50 text-blue-800' :
                   errorMessage.includes('🚫') ? 'bg-orange-50 text-orange-800' :
@@ -494,12 +523,21 @@ export default function Home() {
                   'bg-red-50 text-red-600'
                 } rounded-xl text-center`}>
                   <p className={
+                    errorMessage.includes('🚦') ? 'text-orange-800' :
                     errorMessage.includes('⚠️') ? 'text-yellow-800' : 
                     errorMessage.includes('🔒') ? 'text-blue-800' :
                     errorMessage.includes('🚫') ? 'text-orange-800' :
                     errorMessage.includes('⏱️') ? 'text-purple-800' :
                     'text-red-600'
                   }>{errorMessage}</p>
+                  {errorMessage.includes('🚦') && (
+                    <button
+                      onClick={() => handleSubmit(new Event('submit') as any)}
+                      className="mt-4 px-6 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 transition-colors"
+                    >
+                      Retry Now
+                    </button>
+                  )}
                 </div>
               )}
             </div>
