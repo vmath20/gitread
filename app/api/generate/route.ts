@@ -337,10 +337,22 @@ Content:\n${gitIngestOutput.content}`
           }
           
           // Clean up the markdown code block markers
-          let readme = response.choices[0].message.content || ''
-          readme = readme.replace(/^```markdown\n?/, '')
-          readme = readme.replace(/```$/, '')
-          readme = readme.trim()
+          let readme = ''
+          if (
+            response &&
+            Array.isArray(response.choices) &&
+            response.choices.length > 0 &&
+            response.choices[0].message &&
+            typeof response.choices[0].message.content === 'string'
+          ) {
+            readme = response.choices[0].message.content
+            readme = readme.replace(/^```markdown\n?/, '')
+            readme = readme.replace(/```$/, '')
+            readme = readme.trim()
+          } else {
+            console.error('Gemini/OpenRouter response missing choices or content:', response)
+            throw new Error('Failed to generate README: No content returned from Gemini/OpenRouter.')
+          }
 
           // Count output words
           const outputTokens = countWords(readme)
