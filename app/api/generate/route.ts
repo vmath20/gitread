@@ -131,7 +131,7 @@ async function processQueue() {
   processing = false;
 }
 
-export async function POST(req: NextRequest) {
+export async function POST(req: NextRequest): Promise<Response> {
   // Overload detection: if queue is too long, return 429
   if (requestQueue.length >= MAX_QUEUE_SIZE) {
     return NextResponse.json({ error: '🚦 Server is busy. Please try again in a few moments.' }, { status: 429 });
@@ -146,7 +146,7 @@ export async function POST(req: NextRequest) {
   }
 
   // Wrap the main logic in a promise and push to the queue
-  return await new Promise((resolve) => {
+  return new Promise<Response>((resolve) => {
     requestQueue.push(async () => {
       try {
         // Check if API key is set
@@ -294,10 +294,10 @@ export async function POST(req: NextRequest) {
           console.log("📝 Input tokens:", inputTokens)
           
           // Check if input tokens exceed the limit
-          if (inputTokens > (gitIngestOutput.limits?.max_input_tokens || 250_000)) {
+          if (inputTokens > (gitIngestOutput.limits?.max_input_tokens || 900_000)) {
             console.log("⚠️ Token limit exceeded")
             resolve(NextResponse.json({ 
-              error: `Repository content exceeds maximum token limit of ${gitIngestOutput.limits?.max_input_tokens.toLocaleString()} tokens (estimated ${inputTokens.toLocaleString()} tokens)`,
+              error: `Repository content exceeds maximum token limit of ${gitIngestOutput.limits?.max_input_tokens?.toLocaleString() || '900,000'} tokens (estimated ${inputTokens.toLocaleString()} tokens)`,
               limits: gitIngestOutput.limits
             }, { status: 400 }))
             return;
