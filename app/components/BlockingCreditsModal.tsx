@@ -1,4 +1,5 @@
-import React from 'react';
+import React, { useState } from 'react';
+import { useAuth } from '@clerk/nextjs';
 
 interface BlockingCreditsModalProps {
   open: boolean;
@@ -8,6 +9,29 @@ interface BlockingCreditsModalProps {
 }
 
 const BlockingCreditsModal: React.FC<BlockingCreditsModalProps> = ({ open, selectedCredits, setSelectedCredits, handleBuyCredits }) => {
+  const { userId } = useAuth();
+  const [refreshing, setRefreshing] = useState(false);
+  const [refreshError, setRefreshError] = useState('');
+
+  const handleRefreshCredits = async () => {
+    setRefreshing(true);
+    setRefreshError('');
+    try {
+      const res = await fetch('/api/credits');
+      if (!res.ok) throw new Error('Failed to fetch credits');
+      const data = await res.json();
+      if (typeof data.credits === 'number' && data.credits > 0) {
+        window.location.reload();
+      } else {
+        setRefreshError('Credits have not been added yet. If you have paid, please wait a minute and try again, or contact support.');
+      }
+    } catch (err) {
+      setRefreshError('Failed to refresh credits. Please try again or contact support.');
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
   if (!open) return null;
   return (
     <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center">
@@ -66,6 +90,22 @@ const BlockingCreditsModal: React.FC<BlockingCreditsModalProps> = ({ open, selec
             </svg>
             <span>Credits never expire and can be used anytime</span>
           </div>
+          <button
+            onClick={handleRefreshCredits}
+            disabled={refreshing}
+            className="w-full py-2 mt-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors"
+          >
+            {refreshing ? 'Refreshing...' : 'Refresh Credits'}
+          </button>
+          {refreshError && <div className="text-red-600 text-sm mt-2">{refreshError}</div>}
+          <a
+            href={`mailto:koyalhq@gmail.com?subject=GitRead%20Payment%20Issue&body=I%20paid%20for%20credits%20but%20they%20were%20not%20added%20to%20my%20account.%20My%20user%20ID%20is:%20${userId || ''}`}
+            className="block mt-2 text-purple-600 hover:text-purple-700 underline text-center"
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            Contact Support
+          </a>
         </div>
       </div>
     </div>
