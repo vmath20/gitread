@@ -122,7 +122,7 @@ The previous standard (supported indefinitely) for generating text is the [Chat 
 
   'marktext/marktext': `# MarkText
 
-[<img src="https://devin.ai/assets/askdeepwiki.png" alt="Ask https://DeepWiki.com" height="20"/>](https://deepwiki.com/marktext/marktext)
+[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/marktext/marktext)
 
 MarkText is a simple and elegant open-source Markdown editor focused on speed and usability. It provides a distraction-free writing experience with a realtime preview (WYSIWYG) interface. MarkText is available for Linux, macOS, and Windows.
 
