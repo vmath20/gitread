@@ -1,8 +1,7 @@
 export const EXAMPLE_READMES = {
   'vmath20/IsoPath': `# IsoPath: Comparing Computational Pathology Foundation Models using Representational Similarity Analysis
 
-[![Ask https://DeepWiki.com](https://devin.ai/assets/askdeepwiki.png)](https://deepwiki.com/vmath20/IsoPath)
-
+[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/vmath20/IsoPath)
 This repository contains code for comparing various pre-trained foundational models on computational pathology tasks using Representational Similarity Analysis (RSA). The analysis focuses on Whole Slide Images (WSIs) from The Cancer Genome Atlas (TCGA) for four cancer subtypes: Breast Invasive Carcinoma (BRCA), Colon Adenocarcinoma (COAD), Lung Adenocarcinoma (LUAD), and Lung Squamous Cell Carcinoma (LUSC).
 
 ## Overview
@@ -77,7 +76,7 @@ The following pre-trained models are included in the comparison:
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.`,
 
   'openai/openai-python': `# OpenAI Python API library
-[![Ask https://DeepWiki.com](https://devin.ai/assets/askdeepwiki.png)](https://deepwiki.com/openai/openai-python)
+[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/openai/openai-python)
 The OpenAI Python library provides convenient access to the OpenAI REST API from any Python 3.8+
 application. The library includes type definitions for all request params and response fields,
 and offers both synchronous and asynchronous clients powered by [httpx](https://github.com/encode/httpx).
@@ -178,7 +177,7 @@ MarkText is licensed under the [MIT License](LICENSE).`,
 
   '3b1b/manim': `# ManimGL
 
-[<img src="https://devin.ai/assets/askdeepwiki.png" alt="Ask https://DeepWiki.com" height="20"/>](https://deepwiki.com/3b1b/manim)
+[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/3b1b/manim)
 
 Manim is an engine for precise programmatic animations, designed for creating explanatory math videos. This repository contains the version of Manim used by Grant Sanderson for videos on the [3Blue1Brown](https://www.3blue1brown.com/) YouTube channel.
 
@@ -310,8 +309,7 @@ ManimGL is released under the MIT License. See \`LICENSE.md\` for details.`,
 
   'mark3labs/mcp-go': `# MCP Go
 
-[<img src="https://devin.ai/assets/askdeepwiki.png" alt="Ask https://DeepWiki.com" height="20"/>](https://deepwiki.com/mark3labs/mcp-go)
-
+[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/mark3labs/mcp-go)
 MCP Go provides a Go implementation of the [Model Context Protocol (MCP)](https://modelcontextprotocol.io). MCP allows applications, particularly those powered by Large Language Models (LLMs), to interact with external data sources and execute actions (tools) in a standardized and secure way.
 
 This library enables developers to build MCP servers in Go, exposing resources (data) and tools (functionality) to MCP clients. It also provides a client implementation for interacting with MCP servers.
