@@ -41,8 +41,7 @@ export default function SuccessPage() {
         return;
       }
       if (!userId) {
-        setError('Please log in to verify your payment');
-        setStatus('error');
+        // Don't set error, just wait for sign-in
         setRetrying(false);
         return;
       }
@@ -84,14 +83,15 @@ export default function SuccessPage() {
     }
   };
 
+  // Only run payment verification if userId is available
   useEffect(() => {
-    if (typeof window !== 'undefined' && userId) {
+    if (typeof window !== 'undefined' && userId && status === 'loading') {
       verifyAndRefresh();
     }
     // eslint-disable-next-line
-  }, [searchParams, userId, router]);
+  }, [searchParams, userId, router, status]);
 
-  // If not signed in, show sign-in prompt
+  // If not signed in, always show sign-in prompt (never show Payment Error for 401)
   if (!userId && status !== 'success') {
     return (
       <div className="min-h-screen bg-[#FBF9F5] dark:bg-gray-900 flex items-center justify-center">
