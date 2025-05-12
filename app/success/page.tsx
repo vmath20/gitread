@@ -46,9 +46,14 @@ export default function SuccessPage() {
         return;
       }
 
+      console.log(`Starting payment verification for session ${sessionId}`);
+
       // First check if credits are already added
       let initialCredits = await fetchCredits();
+      console.log(`Initial credits check: ${initialCredits}`);
+      
       if (typeof initialCredits === 'number' && initialCredits > 0) {
+        console.log('Credits already added, proceeding to success');
         setStatus('success');
         setRetrying(false);
         setTimeout(() => router.push('/'), 2000);
@@ -56,6 +61,7 @@ export default function SuccessPage() {
       }
 
       // Verify the payment
+      console.log('Verifying payment with backend...');
       const response = await fetch('/api/verify-payment', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -63,14 +69,19 @@ export default function SuccessPage() {
       });
 
       const responseData = await response.json();
+      console.log('Verification response:', responseData);
 
       // If verification was successful, wait for credits to be added
       if (response.ok) {
+        console.log('Payment verified, waiting for credits to be added...');
         let tries = 0;
         let newCredits = null;
         while (tries < 10) { // Increased retries
           newCredits = await fetchCredits();
+          console.log(`Credit check attempt ${tries + 1}: ${newCredits}`);
+          
           if (typeof newCredits === 'number' && newCredits > 0) {
+            console.log('Credits added successfully');
             setStatus('success');
             setRetrying(false);
             setTimeout(() => router.push('/'), 2000);
@@ -79,8 +90,10 @@ export default function SuccessPage() {
           await new Promise(r => setTimeout(r, 1000));
           tries++;
         }
+        console.log('Credits not added after verification');
         setError('Payment processed, but credits have not been added yet. Please try refreshing credits or contact support.');
       } else {
+        console.log('Payment verification failed:', responseData.error);
         setError(responseData.error || 'Failed to process payment');
       }
       setStatus('error');

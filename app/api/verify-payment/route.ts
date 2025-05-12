@@ -25,6 +25,8 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Missing session ID' }, { status: 400 });
     }
 
+    console.log(`Verifying payment for session ${sessionId} and user ${userId}`);
+
     // First check if this session has already been processed
     const { data: processedSession, error: processedError } = await supabaseAdmin
       .from('processed_stripe_events')
@@ -44,6 +46,7 @@ export async function POST(req: NextRequest) {
 
     // If not processed, verify with Stripe
     const session = await stripe.checkout.sessions.retrieve(sessionId);
+    console.log(`Session ${sessionId} payment status: ${session.payment_status}`);
     
     // Verify the session belongs to this user
     if (session.metadata?.userId !== userId) {
@@ -81,6 +84,13 @@ export async function POST(req: NextRequest) {
     }
   } catch (error) {
     console.error('Error verifying payment:', error);
+    if (error instanceof Error) {
+      console.error('Error details:', {
+        message: error.message,
+        stack: error.stack,
+        name: error.name
+      });
+    }
     return NextResponse.json(
       { error: 'Error verifying payment' },
       { status: 500 }

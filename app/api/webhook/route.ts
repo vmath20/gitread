@@ -15,17 +15,32 @@ const supabaseAdmin = createClient(
 
 export async function POST(req: NextRequest) {
   const body = await req.text();
-  const signature = headers().get('stripe-signature')!;
+  const signature = headers().get('stripe-signature');
+
+  if (!signature) {
+    console.error('No Stripe signature found in webhook request');
+    return NextResponse.json({ error: 'No signature' }, { status: 400 });
+  }
+
+  if (!process.env.STRIPE_WEBHOOK_SECRET) {
+    console.error('STRIPE_WEBHOOK_SECRET is not configured');
+    return NextResponse.json({ error: 'Webhook secret not configured' }, { status: 500 });
+  }
 
   try {
+    console.log('Received webhook event, constructing event...');
     const event = stripe.webhooks.constructEvent(
       body,
       signature,
-      process.env.STRIPE_WEBHOOK_SECRET!
+      process.env.STRIPE_WEBHOOK_SECRET
     );
+    console.log(`Webhook event type: ${event.type}`);
 
     if (event.type === 'checkout.session.completed') {
       const session = event.data.object as Stripe.Checkout.Session;
+      console.log(`Processing checkout.session.completed for session: ${session.id}`);
+      console.log('Session metadata:', session.metadata);
+
       const userId = session.metadata?.userId;
       const credits = parseInt(session.metadata?.credits || '0');
 
@@ -85,6 +100,14 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ received: true });
   } catch (error) {
     console.error('Error handling webhook:', error);
+    // Log the full error details
+    if (error instanceof Error) {
+      console.error('Error details:', {
+        message: error.message,
+        stack: error.stack,
+        name: error.name
+      });
+    }
     return NextResponse.json(
       { error: 'Webhook handler failed' },
       { status: 400 }
