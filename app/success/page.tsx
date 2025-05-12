@@ -62,31 +62,31 @@ export default function SuccessPage() {
         body: JSON.stringify({ sessionId }),
       });
 
-      // Even if verification fails, check credits again
-      let tries = 0;
-      let newCredits = null;
-      while (tries < 5) {
-        newCredits = await fetchCredits();
-        if (typeof newCredits === 'number' && newCredits > 0) {
-          setStatus('success');
-          setRetrying(false);
-          setTimeout(() => router.push('/'), 2000);
-          return;
-        }
-        await new Promise(r => setTimeout(r, 1000));
-        tries++;
-      }
+      const responseData = await response.json();
 
-      // If we get here, either verification failed or credits weren't added
-      if (!response.ok) {
-        const errorData = await response.json();
-        setError(errorData.error || 'Failed to process payment');
-      } else {
+      // If verification was successful, wait for credits to be added
+      if (response.ok) {
+        let tries = 0;
+        let newCredits = null;
+        while (tries < 10) { // Increased retries
+          newCredits = await fetchCredits();
+          if (typeof newCredits === 'number' && newCredits > 0) {
+            setStatus('success');
+            setRetrying(false);
+            setTimeout(() => router.push('/'), 2000);
+            return;
+          }
+          await new Promise(r => setTimeout(r, 1000));
+          tries++;
+        }
         setError('Payment processed, but credits have not been added yet. Please try refreshing credits or contact support.');
+      } else {
+        setError(responseData.error || 'Failed to process payment');
       }
       setStatus('error');
       setRetrying(false);
     } catch (err) {
+      console.error('Payment verification error:', err);
       setError('Failed to process payment. Please try again or contact support.');
       setStatus('error');
       setRetrying(false);
