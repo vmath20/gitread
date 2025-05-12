@@ -10,16 +10,12 @@ const supabaseAdmin = createClient(
 
 // GET endpoint to fetch user credits
 export async function GET(req: NextRequest) {
-  const { userId } = getAuth(req);
-  
-  if (!userId) {
-    return NextResponse.json(
-      { error: 'Unauthorized' },
-      { status: 401 }
-    );
-  }
-
   try {
+    const { userId } = getAuth(req);
+    if (!userId) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
     const { data, error } = await supabaseAdmin
       .from('user_credits')
       .select('credits')
@@ -27,41 +23,18 @@ export async function GET(req: NextRequest) {
       .single();
 
     if (error) {
-      // If no record exists, create one with default credits
       if (error.code === 'PGRST116') {
-        const { data: newData, error: upsertError } = await supabaseAdmin
-          .from('user_credits')
-          .upsert({
-            user_id: userId,
-            credits: 1,
-            updated_at: new Date().toISOString()
-          })
-          .select('credits')
-          .single();
-
-        if (upsertError) {
-          console.error('Error creating user credits:', upsertError);
-          return NextResponse.json(
-            { error: 'Error fetching credits' },
-            { status: 500 }
-          );
-        }
-
-        return NextResponse.json({ credits: newData?.credits ?? 1 });
+        // No credits record found, return 0
+        return NextResponse.json({ credits: 0 });
       }
-
-      console.error('Error fetching credits:', error);
-      return NextResponse.json(
-        { error: 'Error fetching credits' },
-        { status: 500 }
-      );
+      throw error;
     }
 
-    return NextResponse.json({ credits: data.credits });
+    return NextResponse.json({ credits: data.credits || 0 });
   } catch (error) {
-    console.error('Unexpected error fetching credits:', error);
+    console.error('Error fetching credits:', error);
     return NextResponse.json(
-      { error: 'Unexpected error fetching credits' },
+      { error: 'Error fetching credits' },
       { status: 500 }
     );
   }
