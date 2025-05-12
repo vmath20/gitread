@@ -45,37 +45,47 @@ export default function SuccessPage() {
         setRetrying(false);
         return;
       }
+
+      // First check if credits are already added
+      let initialCredits = await fetchCredits();
+      if (typeof initialCredits === 'number' && initialCredits > 0) {
+        setStatus('success');
+        setRetrying(false);
+        setTimeout(() => router.push('/'), 2000);
+        return;
+      }
+
       // Verify the payment
       const response = await fetch('/api/verify-payment', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ sessionId }),
       });
-      if (!response.ok) {
-        const errorData = await response.json();
-        setError(errorData.error || 'Failed to process payment');
-        setStatus('error');
-        setRetrying(false);
-        return;
-      }
-      // Now fetch credits and only redirect if credits increased
+
+      // Even if verification fails, check credits again
       let tries = 0;
       let newCredits = null;
       while (tries < 5) {
         newCredits = await fetchCredits();
-        if (typeof newCredits === 'number' && newCredits > 0) break;
+        if (typeof newCredits === 'number' && newCredits > 0) {
+          setStatus('success');
+          setRetrying(false);
+          setTimeout(() => router.push('/'), 2000);
+          return;
+        }
         await new Promise(r => setTimeout(r, 1000));
         tries++;
       }
-      if (typeof newCredits === 'number' && newCredits > 0) {
-        setStatus('success');
-        setRetrying(false);
-        setTimeout(() => router.push('/'), 2000);
+
+      // If we get here, either verification failed or credits weren't added
+      if (!response.ok) {
+        const errorData = await response.json();
+        setError(errorData.error || 'Failed to process payment');
       } else {
         setError('Payment processed, but credits have not been added yet. Please try refreshing credits or contact support.');
-        setStatus('error');
-        setRetrying(false);
       }
+      setStatus('error');
+      setRetrying(false);
     } catch (err) {
       setError('Failed to process payment. Please try again or contact support.');
       setStatus('error');

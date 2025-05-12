@@ -24,7 +24,6 @@ export async function POST(req: NextRequest) {
     const session = await stripe.checkout.sessions.retrieve(sessionId);
 
     if (session.payment_status === 'paid') {
-      // Check if the webhook has already processed this session
       const credits = parseInt(session.metadata?.credits || '0');
       
       // Check if this session has been recorded in processed events
@@ -43,45 +42,16 @@ export async function POST(req: NextRequest) {
       if (!processedSession && credits > 0) {
         console.log(`Session ${sessionId} not yet processed by webhook, adding credits now`);
         
-        // Get current credits
-        const { data: currentCredits, error: creditsError } = await supabaseAdmin
-          .from('user_credits')
-          .select('credits')
-          .eq('user_id', userId)
-          .single();
-          
-        if (creditsError && creditsError.code !== 'PGRST116') {
-          console.error('Error fetching current credits:', creditsError);
-          throw creditsError;
-        }
+        // Use a transaction to ensure atomicity
+        const { error: transactionError } = await supabaseAdmin.rpc('add_user_credits', {
+          p_user_id: userId,
+          p_credits: credits,
+          p_event_id: `session_${sessionId}`
+        });
         
-        // Add credits
-        const { error: updateError } = await supabaseAdmin
-          .from('user_credits')
-          .upsert({
-            user_id: userId,
-            credits: (currentCredits?.credits || 0) + credits,
-            updated_at: new Date().toISOString()
-          });
-          
-        if (updateError) {
-          console.error('Error adding credits:', updateError);
-          throw updateError;
-        }
-        
-        // Mark as processed so webhook doesn't double-add
-        const { error: insertError } = await supabaseAdmin
-          .from('processed_stripe_events')
-          .insert({
-            event_id: `session_${sessionId}`,
-            user_id: userId,
-            credits: credits,
-            processed_at: new Date().toISOString()
-          });
-          
-        if (insertError) {
-          console.error('Error marking event as processed:', insertError);
-          throw insertError;
+        if (transactionError) {
+          console.error('Error in credit addition transaction:', transactionError);
+          throw transactionError;
         }
       } else if (processedSession) {
         console.log(`Session ${sessionId} already processed, skipping credit addition`);

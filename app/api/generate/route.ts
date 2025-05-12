@@ -304,7 +304,7 @@ export async function POST(req: NextRequest): Promise<Response> {
           }
           
           // Create prompt for the model
-          const prompt = `Make a README for the following GitHub repository. Do not generate any placeholder text or placeholder images in the readme file. For all READMEs, add a DeepWiki badge to your README that links to your repo's DeepWiki. Do not add any badges except for the DeepWiki badge.
+          const prompt = `Make a README for the following GitHub repository. Do not generate any placeholder text or placeholder images in the readme file. For all READMEs, add a DeepWiki badge to your README that links to your repo's DeepWiki (make the badge right below the title). Do not add any badges except for the DeepWiki badge.
 
 To generate the DeepWiki badge: 
 [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/${repoPath})

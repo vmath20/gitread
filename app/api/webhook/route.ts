@@ -50,45 +50,16 @@ export async function POST(req: NextRequest) {
           return NextResponse.json({ received: true });
         }
 
-        // Get current credits
-        const { data: currentCredits, error: creditsError } = await supabaseAdmin
-          .from('user_credits')
-          .select('credits')
-          .eq('user_id', userId)
-          .single();
-          
-        if (creditsError && creditsError.code !== 'PGRST116') {
-          console.error('Error fetching current credits:', creditsError);
-          throw creditsError;
-        }
+        // Use the atomic transaction function
+        const { error: transactionError } = await supabaseAdmin.rpc('add_user_credits', {
+          p_user_id: userId,
+          p_credits: credits,
+          p_event_id: eventId
+        });
 
-        // Add credits using service role
-        const { error: updateError } = await supabaseAdmin
-          .from('user_credits')
-          .upsert({
-            user_id: userId,
-            credits: (currentCredits?.credits || 0) + credits,
-            updated_at: new Date().toISOString()
-          });
-
-        if (updateError) {
-          console.error('Error adding credits:', updateError);
-          throw updateError;
-        }
-        
-        // Mark the event as processed
-        const { error: insertError } = await supabaseAdmin
-          .from('processed_stripe_events')
-          .insert({
-            event_id: eventId,
-            user_id: userId,
-            credits: credits,
-            processed_at: new Date().toISOString()
-          });
-
-        if (insertError) {
-          console.error('Error marking event as processed:', insertError);
-          throw insertError;
+        if (transactionError) {
+          console.error('Error in credit addition transaction:', transactionError);
+          throw transactionError;
         }
         
         console.log(`Successfully processed event ${eventId} for user ${userId}, added ${credits} credits`);
