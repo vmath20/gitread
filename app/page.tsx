@@ -182,6 +182,28 @@ export default function Home() {
     }
   }, [isSignedIn]);
 
+  useEffect(() => {
+    async function ensureInitialCredit() {
+      if (isSignedIn && userId) {
+        try {
+          const response = await fetch('/api/credits');
+          const data = await response.json();
+          if (response.ok && (typeof data.credits !== 'number' || data.credits < 1)) {
+            // Add 1 credit if user has no credits
+            await fetch('/api/credits', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ credits: 1 }),
+            });
+          }
+        } catch (err) {
+          // Ignore errors here, just a safety net
+        }
+      }
+    }
+    ensureInitialCredit();
+  }, [isSignedIn, userId]);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     
