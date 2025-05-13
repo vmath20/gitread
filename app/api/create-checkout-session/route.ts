@@ -40,7 +40,7 @@ export async function POST(req: NextRequest) {
       ],
       mode: 'payment',
       success_url: `${process.env.NEXT_PUBLIC_APP_URL}/success?session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url: `${process.env.NEXT_PUBLIC_APP_URL}/pricing`,
+      cancel_url: `${process.env.NEXT_PUBLIC_APP_URL}/`,
       metadata: {
         userId,
         credits: credits.toString(),
