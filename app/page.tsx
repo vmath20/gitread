@@ -147,10 +147,22 @@ export default function Home() {
     };
   }, [isSignedIn, userId]);
 
+  // Delay the appearance of the add credits popup for all users
   useEffect(() => {
+    let timeout: NodeJS.Timeout | null = null;
     if (isSignedIn && credits <= 0) {
-      setShowBlockingCreditsModal(true);
+      // Instantly hide the modal if it's open (in case credits are restored)
+      setShowBlockingCreditsModal(false);
+      // Show the modal after a delay
+      timeout = setTimeout(() => {
+        setShowBlockingCreditsModal(true);
+      }, 3000); // 3 seconds delay
+    } else {
+      setShowBlockingCreditsModal(false);
     }
+    return () => {
+      if (timeout) clearTimeout(timeout);
+    };
   }, [isSignedIn, credits]);
 
   // Warn user if they try to leave while generating a README
