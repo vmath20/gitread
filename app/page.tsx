@@ -365,23 +365,13 @@ export default function Home() {
       // Update credits using the new API endpoint
       if (userId) {
         try {
-          const newCredits = credits - 1
-          
-          const creditsResponse = await fetch('/api/credits', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({ credits: newCredits }),
-          });
-          
-          if (!creditsResponse.ok) {
-            throw new Error(`Failed to update credits: ${creditsResponse.statusText}`);
+          // Instead, just fetch the latest credits after generation
+          const creditsResponse = await fetch('/api/credits');
+          if (creditsResponse.ok) {
+            const creditsData = await creditsResponse.json();
+            setCredits(creditsData.credits);
           }
-          
-          const creditsData = await creditsResponse.json();
-          setCredits(creditsData.credits);
-          
+
           // Save the README using the new API endpoint
           const saveResponse = await fetch('/api/readme-history', {
             method: 'POST',
