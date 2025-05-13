@@ -174,6 +174,14 @@ export default function Home() {
     };
   }, [loading]);
 
+  useEffect(() => {
+    // Show sign-in modal automatically if not signed in
+    if (!isSignedIn) {
+      setAuthMode('signin');
+      setShowAuthModal(true);
+    }
+  }, [isSignedIn]);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     
