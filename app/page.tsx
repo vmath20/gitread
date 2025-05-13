@@ -188,16 +188,24 @@ export default function Home() {
         try {
           const response = await fetch('/api/credits');
           const data = await response.json();
+          console.log('Initial credit check:', data);
           if (response.ok && (typeof data.credits !== 'number' || data.credits < 1)) {
             // Add 1 credit if user has no credits
-            await fetch('/api/credits', {
+            const upsertRes = await fetch('/api/credits', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ credits: 1 }),
             });
+            const upsertData = await upsertRes.json();
+            console.log('Upserted 1 credit:', upsertData);
+            // Force a refresh
+            const refreshRes = await fetch('/api/credits');
+            const refreshData = await refreshRes.json();
+            setCredits(refreshData.credits);
+            console.log('Credits after upsert:', refreshData.credits);
           }
         } catch (err) {
-          // Ignore errors here, just a safety net
+          console.error('Error ensuring initial credit:', err);
         }
       }
     }
