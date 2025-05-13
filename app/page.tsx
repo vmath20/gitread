@@ -183,58 +183,39 @@ export default function Home() {
   }, [isSignedIn]);
 
   useEffect(() => {
-    async function ensureInitialCredit() {
+    async function maybeGiveFreeCredit() {
       if (isSignedIn && userId) {
         try {
-          const response = await fetch('/api/credits');
-          const data = await response.json();
-          console.log('Initial credit check:', data);
-          if (response.ok && (typeof data.credits !== 'number' || data.credits < 1)) {
-            // Add 1 credit if user has no credits
-            const upsertRes = await fetch('/api/credits', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ credits: 1 }),
-            });
-            const upsertData = await upsertRes.json();
-            console.log('Upserted 1 credit:', upsertData);
-            // Force a refresh
-            const refreshRes = await fetch('/api/credits');
-            const refreshData = await refreshRes.json();
-            setCredits(refreshData.credits);
-            console.log('Credits after upsert:', refreshData.credits);
+          // Fetch the user's README history
+          const historyRes = await fetch('/api/readme-history');
+          const historyData = await historyRes.json();
+          // If the user has never generated a README, give them 1 free credit
+          if (Array.isArray(historyData.history) && historyData.history.length === 0) {
+            // Now check their credits
+            const creditsRes = await fetch('/api/credits');
+            const creditsData = await creditsRes.json();
+            if (creditsRes.ok && (typeof creditsData.credits !== 'number' || creditsData.credits < 1)) {
+              await fetch('/api/credits', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ credits: 1 }),
+              });
+              setCredits(1);
+            }
+          } else {
+            // If they have history, just fetch their current credits
+            const creditsRes = await fetch('/api/credits');
+            if (creditsRes.ok) {
+              const creditsData = await creditsRes.json();
+              setCredits(creditsData.credits);
+            }
           }
         } catch (err) {
-          console.error('Error ensuring initial credit:', err);
+          console.error('Error checking for free credit:', err);
         }
       }
     }
-    ensureInitialCredit();
-  }, [isSignedIn, userId]);
-
-  // Immediately assign 1 credit after sign-in if user is new (has no credits)
-  useEffect(() => {
-    async function assignInitialCreditIfNeeded() {
-      if (isSignedIn && userId) {
-        try {
-          const response = await fetch('/api/credits');
-          const data = await response.json();
-          if (response.ok && (typeof data.credits !== 'number' || data.credits < 1)) {
-            // Add 1 credit if user has no credits
-            await fetch('/api/credits', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ credits: 1 }),
-            });
-            // Optionally, refresh credits state
-            setCredits(1);
-          }
-        } catch (err) {
-          console.error('Error assigning initial credit after sign-in:', err);
-        }
-      }
-    }
-    assignInitialCreditIfNeeded();
+    maybeGiveFreeCredit();
   }, [isSignedIn, userId]);
 
   const handleSubmit = async (e: React.FormEvent) => {
