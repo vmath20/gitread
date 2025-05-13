@@ -27,7 +27,7 @@ export async function POST(req: NextRequest) {
 
     console.log(`Verifying payment for session ${sessionId} and user ${userId}`);
 
-    // First check if this session has already been processed
+    // Check if this session has already been processed
     const { data: processedSession, error: processedError } = await supabaseAdmin
       .from('processed_stripe_events')
       .select('*')
@@ -64,16 +64,40 @@ export async function POST(req: NextRequest) {
 
       console.log(`Processing session ${sessionId} for user ${userId}, adding ${credits} credits`);
       
-      // Use a transaction to ensure atomicity
-      const { error: transactionError } = await supabaseAdmin.rpc('add_user_credits', {
-        p_user_id: userId,
-        p_credits: credits,
-        p_event_id: `session_${sessionId}`
-      });
-      
-      if (transactionError) {
-        console.error('Error in credit addition transaction:', transactionError);
-        throw transactionError;
+      // Get current credits
+      const { data: currentCredits, error: creditsError } = await supabaseAdmin
+        .from('user_credits')
+        .select('credits')
+        .eq('user_id', userId)
+        .single();
+      if (creditsError && creditsError.code !== 'PGRST116') {
+        throw creditsError;
+      }
+      const newCredits = (currentCredits?.credits || 0) + credits;
+
+      // Add credits to user
+      const { error: creditError } = await supabaseAdmin
+        .from('user_credits')
+        .upsert({
+          user_id: userId,
+          credits: newCredits,
+          updated_at: new Date().toISOString(),
+        });
+      if (creditError) {
+        throw creditError;
+      }
+
+      // Mark event as processed
+      const { error: eventError } = await supabaseAdmin
+        .from('processed_stripe_events')
+        .insert({
+          event_id: `session_${sessionId}`,
+          user_id: userId,
+          credits: credits,
+          processed_at: new Date().toISOString(),
+        });
+      if (eventError) {
+        throw eventError;
       }
 
       console.log(`Successfully processed session ${sessionId}`);
