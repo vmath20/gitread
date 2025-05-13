@@ -436,11 +436,11 @@ export default function Home() {
         body: JSON.stringify({ credits: creditAmount }),
       });
 
-      const { sessionId } = await response.json();
-      
-      if (sessionId) {
-        // Redirect to checkout page
-        window.location.href = sessionId;
+      const data = await response.json();
+      if (data.url) {
+        window.location.href = data.url;
+      } else {
+        console.error('Stripe session creation failed:', data.error);
       }
     } catch (error) {
       console.error('Error buying credits:', error);
