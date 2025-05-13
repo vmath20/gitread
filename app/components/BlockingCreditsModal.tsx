@@ -6,9 +6,10 @@ interface BlockingCreditsModalProps {
   selectedCredits: number;
   setSelectedCredits: (n: number) => void;
   handleBuyCredits: (n: number) => void;
+  onClose?: () => void;
 }
 
-const BlockingCreditsModal: React.FC<BlockingCreditsModalProps> = ({ open, selectedCredits, setSelectedCredits, handleBuyCredits }) => {
+const BlockingCreditsModal: React.FC<BlockingCreditsModalProps> = ({ open, selectedCredits, setSelectedCredits, handleBuyCredits, onClose }) => {
   const { userId } = useAuth();
   const [refreshing, setRefreshing] = useState(false);
   const [refreshError, setRefreshError] = useState('');
@@ -38,7 +39,15 @@ const BlockingCreditsModal: React.FC<BlockingCreditsModalProps> = ({ open, selec
       <div className="bg-white rounded-2xl shadow-xl max-w-md w-full p-8 relative">
         <div className="flex justify-between items-center mb-4">
           <h3 className="text-xl font-semibold text-gray-800">Purchase Credits</h3>
-          <div className="bg-purple-100 text-purple-600 px-3 py-1 rounded-full text-sm font-medium">Best Value</div>
+          <button
+            aria-label="Close"
+            onClick={onClose}
+            className="absolute top-4 right-4 text-gray-400 hover:text-gray-700 text-2xl font-bold focus:outline-none"
+            style={{ background: 'none', border: 'none', cursor: 'pointer' }}
+          >
+            &times;
+          </button>
+          <div className="bg-purple-100 text-purple-600 px-3 py-1 rounded-full text-sm font-medium ml-8">Best Value</div>
         </div>
         <p className="text-gray-600 mb-6">You've used all your credits</p>
         <div className="space-y-6">

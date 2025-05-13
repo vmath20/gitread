@@ -35,6 +35,7 @@ export default function Home() {
   const COOLDOWN_PERIOD = 5 // 5 seconds cooldown
 
   const [queuePosition, setQueuePosition] = useState<number | null>(null)
+  const [showBlockingCreditsModal, setShowBlockingCreditsModal] = useState(false)
 
   useEffect(() => {
     async function fetchCredits() {
@@ -137,6 +138,12 @@ export default function Home() {
     };
   }, [isSignedIn, userId]);
 
+  useEffect(() => {
+    if (isSignedIn && credits <= 0) {
+      setShowBlockingCreditsModal(true);
+    }
+  }, [isSignedIn, credits]);
+
   // Warn user if they try to leave while generating a README
   useEffect(() => {
     const handleBeforeUnload = (e: BeforeUnloadEvent) => {
@@ -160,6 +167,12 @@ export default function Home() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    
+    // Prevent README generation if credits are 0
+    if (credits <= 0) {
+      setShowBlockingCreditsModal(true);
+      return;
+    }
     
     // Check for rate limiting
     if (isButtonCooldown) {
@@ -458,7 +471,25 @@ export default function Home() {
       />
       {/* Blocking Credits Modal */}
       {isSignedIn && credits <= 0 && (
-        <BlockingCreditsModal open selectedCredits={selectedCredits} setSelectedCredits={setSelectedCredits} handleBuyCredits={handleBuyCredits} />
+        <>
+          <BlockingCreditsModal 
+            open={showBlockingCreditsModal} 
+            selectedCredits={selectedCredits} 
+            setSelectedCredits={setSelectedCredits} 
+            handleBuyCredits={handleBuyCredits}
+            onClose={() => setShowBlockingCreditsModal(false)}
+          />
+          {!showBlockingCreditsModal && (
+            <div className="fixed bottom-8 right-8 z-40">
+              <button
+                onClick={() => setShowBlockingCreditsModal(true)}
+                className="px-6 py-3 bg-purple-600 text-white rounded-lg shadow-lg hover:bg-purple-700 transition-colors font-semibold"
+              >
+                Add credits
+              </button>
+            </div>
+          )}
+        </>
       )}
       
       {isSignedIn && (
