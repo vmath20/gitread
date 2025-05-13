@@ -212,6 +212,31 @@ export default function Home() {
     ensureInitialCredit();
   }, [isSignedIn, userId]);
 
+  // Immediately assign 1 credit after sign-in if user is new (has no credits)
+  useEffect(() => {
+    async function assignInitialCreditIfNeeded() {
+      if (isSignedIn && userId) {
+        try {
+          const response = await fetch('/api/credits');
+          const data = await response.json();
+          if (response.ok && (typeof data.credits !== 'number' || data.credits < 1)) {
+            // Add 1 credit if user has no credits
+            await fetch('/api/credits', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ credits: 1 }),
+            });
+            // Optionally, refresh credits state
+            setCredits(1);
+          }
+        } catch (err) {
+          console.error('Error assigning initial credit after sign-in:', err);
+        }
+      }
+    }
+    assignInitialCreditIfNeeded();
+  }, [isSignedIn, userId]);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     
