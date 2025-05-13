@@ -177,8 +177,11 @@ export default function Home() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     
-    // Prevent README generation if credits are 0
-    if (credits <= 0) {
+    let trimmedRepoUrl = repoUrl.endsWith('/') ? repoUrl.slice(0, -1) : repoUrl
+    const repo = trimmedRepoUrl.replace('https://github.com/', '')
+
+    // Prevent README generation for non-example repos if credits are 0
+    if (credits <= 0 && !(repo in EXAMPLE_READMES)) {
       setShowBlockingCreditsModal(true);
       return;
     }
@@ -209,9 +212,6 @@ export default function Home() {
     let generatedReadme = '';
     const creditsBefore = credits;
     try {
-      let trimmedRepoUrl = repoUrl.endsWith('/') ? repoUrl.slice(0, -1) : repoUrl
-      const repo = trimmedRepoUrl.replace('https://github.com/', '')
-      
       if (repo in EXAMPLE_READMES) {
         // For example repos, just set the content directly without loading state
         setLoading(false)
