@@ -6,7 +6,6 @@ import confetti from 'canvas-confetti'
 import { EXAMPLE_READMES } from './utils/example-readmes'
 import { useAuth, UserButton } from '@clerk/nextjs'
 import { getUserCredits, saveGeneratedReadme, getGeneratedReadmes } from './utils/supabase'
-import { getStripe } from './utils/stripe'
 import LoadingIndicator from './components/LoadingIndicator'
 import ThemeToggle from './components/ThemeToggle'
 import AuthModal from './components/AuthModal'
@@ -438,13 +437,10 @@ export default function Home() {
       });
 
       const { sessionId } = await response.json();
-      const stripe = await getStripe();
       
-      if (stripe) {
-        const { error } = await stripe.redirectToCheckout({ sessionId });
-        if (error) {
-          console.error('Error redirecting to checkout:', error);
-        }
+      if (sessionId) {
+        // Redirect to checkout page
+        window.location.href = sessionId;
       }
     } catch (error) {
       console.error('Error buying credits:', error);
