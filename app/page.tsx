@@ -45,7 +45,6 @@ export default function Home() {
           if (!response.ok) {
             throw new Error(`Error fetching credits: ${response.statusText}`);
           }
-          
           const data = await response.json();
           console.log('Initial credits loaded:', data.credits);
           setCredits(data.credits);
@@ -60,16 +59,26 @@ export default function Home() {
     const urlParams = new URLSearchParams(window.location.search)
     const repoParam = urlParams.get('repo')
     if (repoParam) {
+      if (!isSignedIn) {
+        // Persist repo in localStorage if not signed in
+        localStorage.setItem('pendingRepo', repoParam)
+      }
       setRepoUrl(repoParam)
       // Optionally auto-submit
       if (isSignedIn && credits > 0) {
-        // Use a timeout to ensure state updates have occurred
         setTimeout(() => {
           const submitButton = document.getElementById('submit-repo-button')
           if (submitButton) {
             submitButton.click()
           }
         }, 500)
+      }
+    } else if (isSignedIn) {
+      // If signed in, check localStorage for pending repo
+      const pendingRepo = localStorage.getItem('pendingRepo')
+      if (pendingRepo) {
+        setRepoUrl(pendingRepo)
+        localStorage.removeItem('pendingRepo')
       }
     }
   }, [isSignedIn, userId])
