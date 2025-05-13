@@ -16,9 +16,14 @@ export default function SuccessPage() {
   // Helper to fetch credits
   const fetchCredits = async () => {
     try {
+      console.log('Fetching credits...');
       const res = await fetch('/api/credits');
-      if (!res.ok) throw new Error('Failed to fetch credits');
+      if (!res.ok) {
+        console.error('Failed to fetch credits:', await res.text());
+        throw new Error('Failed to fetch credits');
+      }
       const data = await res.json();
+      console.log('Credits fetched:', data);
       setCredits(data.credits);
       return data.credits;
     } catch (err) {
@@ -33,30 +38,41 @@ export default function SuccessPage() {
     try {
       const sessionId = searchParams?.get('session_id');
       if (!sessionId) {
+        console.error('No session ID found in URL');
         setError('Missing payment information');
         setStatus('error');
         return;
       }
 
       if (!userId) {
+        console.log('No user ID, waiting for sign-in...');
         return; // Wait for sign-in
       }
 
+      console.log('Starting payment status check:', { sessionId, userId });
+
       // First check if credits are already added
       let currentCredits = await fetchCredits();
+      console.log('Initial credits check:', currentCredits);
+      
       if (typeof currentCredits === 'number' && currentCredits > 0) {
+        console.log('Credits found, proceeding to success');
         setStatus('success');
         setTimeout(() => router.push('/'), 2000);
         return;
       }
 
       // If credits not found, wait and retry
+      console.log('Credits not found, starting retry loop...');
       let tries = 0;
       while (tries < 10) {
+        console.log(`Retry attempt ${tries + 1}/10`);
         await new Promise(r => setTimeout(r, 1000));
         currentCredits = await fetchCredits();
+        console.log(`Credits after retry ${tries + 1}:`, currentCredits);
         
         if (typeof currentCredits === 'number' && currentCredits > 0) {
+          console.log('Credits found after retry, proceeding to success');
           setStatus('success');
           setTimeout(() => router.push('/'), 2000);
           return;
@@ -65,6 +81,7 @@ export default function SuccessPage() {
       }
 
       // If we get here, credits weren't added
+      console.error('Credits not added after all retries');
       setError('Payment processed, but credits have not been added yet. Please try refreshing or contact support.');
       setStatus('error');
     } catch (err) {
