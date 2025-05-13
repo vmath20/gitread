@@ -37,6 +37,7 @@ export default function SuccessPage() {
   const checkPaymentStatus = async () => {
     try {
       const sessionId = searchParams?.get('session_id');
+      console.log('Session ID from URL:', sessionId);
       if (!sessionId) {
         console.error('No session ID found in URL');
         setError('Missing payment information');
@@ -61,6 +62,16 @@ export default function SuccessPage() {
         setTimeout(() => router.push('/'), 2000);
         return;
       }
+
+      // Call verify-payment and log the response
+      console.log('Calling /api/verify-payment...');
+      const response = await fetch('/api/verify-payment', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sessionId }),
+      });
+      const responseData = await response.json();
+      console.log('Verify payment response:', responseData);
 
       // If credits not found, wait and retry
       console.log('Credits not found, starting retry loop...');
