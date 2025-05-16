@@ -167,6 +167,10 @@ The Git repository ingestion logic, while prototyped in `scripts/git_ingest.py`,
 
 For any issues or questions, please refer to the [Support Page](/support) on the GitRead website or contact [koyalhq@gmail.com](mailto:koyalhq@gmail.com).
 
+## Acknowledgment
+
+Inspired by [Gitingest](https://gitingest.com/) and [DeepWiki](http://deepwiki.com/) 
+
 ---
 
 Made with ❤️ by [@koyalhq](https://twitter.com/koyalhq)
