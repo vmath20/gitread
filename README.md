@@ -1,3 +1,5 @@
+[![Image](https://i.imgur.com/dqSWeiH.jpeg)](https://gitread.dev/)
+
 # GitRead
 [![Ask DeepWiki](https://devin.ai/assets/askdeepwiki.png)](https://deepwiki.com/vmath20/gitread)
 
